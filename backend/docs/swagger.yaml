@@ -1,0 +1,52 @@
+openapi: 3.0.0
+info:
+  title: SmatTest Marker API
+  version: 1.0.0
+  description: API for generating test cases
+servers:
+  - url: http://localhost:4000
+paths:
+  /generate-tests:
+    post:
+      summary: Generate test cases
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                specification:
+                  type: string
+                  example: "Login functionality for an e-commerce website."
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  testCases:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TestCase'
+        '400':
+          description: Bad request
+        '500':
+          description: Internal server error
+components:
+  schemas:
+    TestCase:
+      type: object
+      properties:
+        title:
+          type: string
+        preconditions:
+          type: string
+        description:
+          type: string
+        steps:
+          type: array
+          items:
+            type: string

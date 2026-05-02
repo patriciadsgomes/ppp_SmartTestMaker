@@ -1,0 +1,16 @@
+{
+  "name": "smattest-marker-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "swagger-ui-express": "4.0.7",
+    "yamljs": "^0.3.0",
+    "axios": "^1.6.7"
+  }
+}
