@@ -5,7 +5,7 @@ Desenvolvido por Patricia da Silva Gomes baseado no material da Mentoria do ![Ju
 
 Aplicação web para geração estruturada de casos de teste baseada na norma **ISO-29119-3**, com suporte a múltiplos idiomas (Português, Inglês e Espanhol), persistência de dados, exportação de relatórios e interface intuitiva.
 
-<img src="backend/frontend/public/logoSmartTestMaker.jpeg" alt="SmartTest Marker Logo" width="200" />
+<img src="frontend/public/logoSmartTestMaker.jpeg" alt="SmartTest Marker Logo" width="200" />
 
 ---
 
@@ -32,13 +32,13 @@ ppp_SmartTestMaker/
 │   ├── src/
 │   │   ├── index.js          # Servidor Express (API REST)
 │   │   └── testGenerator.js  # Gerador de casos de teste ISO-29119-3
-│   ├── frontend/
-│   │   ├── public/
-│   │   │   └── logoSmartTestMaker.jpeg
-│   │   └── src/
-│   │       └── App.js        # Interface React principal
 │   ├── testcases.json        # Persistência dos casos de teste
 │   └── package.json
+├── frontend/
+│   ├── public/
+│   │   └── logoSmartTestMaker.jpeg
+│   └── src/
+│       └── App.js            # Interface React principal
 └── README.md
 ```
 
@@ -66,7 +66,7 @@ npm start
 Em outro terminal:
 
 ```bash
-cd backend/frontend
+cd frontend
 npm install
 npm start
 ```
