@@ -1,0 +1,60 @@
+[
+  {
+    "id": "CT-001",
+    "requirements": "RN2",
+    "conditions": [
+      {
+        "condId": 1,
+        "description": "Os limites de valor referentes a Transferência",
+        "priority": "Alta"
+      },
+      {
+        "condId": 2,
+        "description": "A correlação entre o envio de transferências acima do limite e a definição de um token",
+        "priority": "Média"
+      },
+      {
+        "condId": 3,
+        "description": "Testar a utilização de tokens inválidos",
+        "priority": "Baixa"
+      }
+    ]
+  },
+  {
+    "id": "CT-002",
+    "requirements": "RN5 (Agendamento de consultas)",
+    "project": "Sistema Hospitalar - Agendamento de Consulta",
+    "conditions": [
+      {
+        "condId": 1,
+        "description": "Validação de disponibilidade de horário na agenda do médico",
+        "priority": "Alta"
+      },
+      {
+        "condId": 2,
+        "description": "Permitir ou bloquear agendamentos em datas passadas",
+        "priority": "Alta"
+      },
+      {
+        "condId": 3,
+        "description": "Validação de preenchimento obrigatório dos dados do paciente",
+        "priority": "Média"
+      },
+      {
+        "condId": 4,
+        "description": "Validação de seleção de médico ativo no sistema",
+        "priority": "Média"
+      },
+      {
+        "condId": 5,
+        "description": "Testar agendamento com dados inválidos (ex: paciente inexistente)",
+        "priority": "Baixa"
+      },
+      {
+        "condId": 6,
+        "description": "Testar comportamento do sistema em falha de confirmação do agendamento",
+        "priority": "Baixa"
+      }
+    ]
+  }
+]

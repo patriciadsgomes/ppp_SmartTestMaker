@@ -1,0 +1,79 @@
+[
+  {
+    "id": "SR-001",
+    "date": "2025-01-12T12:20",
+    "tester": "Júlio de Lima",
+    "module": "Transferências",
+    "charter": {
+      "text": "Explore a Funcionalidade de Transferência de Valores\nCom a Heurística de Sabedoria em Testes com foco em Adotar a Abordagem Contrária\nPara descobrir se o software lida bem com situações onde o usuário tenta ações contrárias a regra de negócios"
+    },
+    "sessionSize": "10 minutos",
+    "notes": [
+      {
+        "type": "I",
+        "text": "Consegui fazer uma transferência de R$ 20 para a minha própria conta (conta origem e destino iguais), não percebi mudança no saldo, mas ainda assim, foi estranho conseguir fazer uma transferência para mim mesmo"
+      },
+      {
+        "type": "I",
+        "text": "Fiquei curioso quanto a ausência na mudança do saldo e tentei uma nova transferência da Ana para o Carlos"
+      },
+      {
+        "type": "R",
+        "text": "Se usuários não verem a mudança no saldo imediatamente após a realização da mesma, poderão continuar fazendo transferências pensando que a anterior não funcionou, o que causaria muitos transtornos para o banco e o cliente."
+      }
+    ],
+    "defects": [
+      "O label do campo Token menciona que o valor da transferência deve ser maior que R$ 5k, mas há uma regra que diz que deveria ser maior ou igual a esse valor",
+      "Após fazer a transferência eu fui deslogado do sistema, algo incomum em softwares de banco como é o nosso caso",
+      "Após transferir R$ 20 da Ana para o Carlos, o saldo de ambos continuaram o mesmo"
+    ],
+    "questions": [
+      "Deveria ser possível transferir da conta origem para a conta origem?"
+    ]
+  },
+  {
+    "id": "SR-002",
+    "date": "2026-03-20T10:20",
+    "tester": "Maria Gomes",
+    "module": "Agendamento de Consultas",
+    "project": "Sistema Hospitalar - Agendamento de Consulta",
+    "charter": {
+      "text": "Explore a funcionalidade de agendamento de consultas\nCom a heurística de testes focada em validação de regras de negócio e comportamento inesperado\nPara descobrir se o sistema lida corretamente com situações inválidas ou inconsistentes no agendamento"
+    },
+    "sessionSize": "30 minutos",
+    "notes": [
+      {
+        "type": "I",
+        "text": "Consegui agendar uma consulta para o mesmo paciente no mesmo horário com o mesmo médico"
+      },
+      {
+        "type": "I",
+        "text": "O sistema não apresentou nenhuma validação de conflito de agenda"
+      },
+      {
+        "type": "I",
+        "text": "Tentei agendar uma consulta com data no passado e o sistema permitiu"
+      },
+      {
+        "type": "R",
+        "text": "Se múltiplas consultas forem agendadas no mesmo horário, pode gerar conflitos graves no atendimento"
+      },
+      {
+        "type": "R",
+        "text": "Permitir agendamento em datas passadas pode comprometer relatórios e histórico médico"
+      }
+    ],
+    "defects": [
+      "O sistema permite agendamento duplicado para o mesmo horário e médico",
+      "É possível agendar consultas em datas passadas",
+      "Falta validação de conflito de agenda",
+      "Feedback visual de sucesso é pouco claro ou inexistente",
+      "Não há bloqueio para horários fora da agenda do médico"
+    ],
+    "questions": [
+      "O sistema deveria permitir múltiplos agendamentos no mesmo horário para o mesmo médico?",
+      "Existe alguma regra para limite de consultas por paciente por dia?",
+      "Como o sistema deve se comportar em casos de conflito de agenda?"
+    ]
+  }
+]

@@ -1,5 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -481,11 +482,30 @@ function App() {
   const [postconditions, setPostconditions] = useState('');
   const [allTestCases, setAllTestCases] = useState([]); // [{ id, pt, en, es }]
   const [selectedId, setSelectedId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [tab, setTab] = useState('pt');
 
+  // Projects
+  const [projects, setProjects] = useState([]);
+  const [selectedProject, setSelectedProject] = useState('');
+  const [newProjectName, setNewProjectName] = useState('');
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [projectFilter, setProjectFilter] = useState('');
+  const [editingProjectId, setEditingProjectId] = useState(null);
+  const [editingProjectName, setEditingProjectName] = useState('');
+  const [projectError, setProjectError] = useState('');
+
   const selectedEntry = allTestCases.find(tc => tc.id === selectedId) || null;
+
+  // Carregar projetos ao iniciar
+  useEffect(() => {
+    fetch('http://localhost:4000/projects')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setProjects(data); })
+      .catch(() => {});
+  }, []);
 
   // Carregar casos salvos ao iniciar
   useEffect(() => {
@@ -528,6 +548,7 @@ function App() {
         title,
         priority,
         traceability,
+        project: selectedProject,
         preconditions: preconditions.split('\n').map(item => item.trim()).filter(Boolean),
         steps: steps
           .split('\n')
@@ -575,20 +596,32 @@ function App() {
   };
 
   const fillExample = () => {
-    setTitle('Validar transferência abaixo de R$ 5.000,00 com token');
-    setPriority('Baixa');
-    setTraceability('RN2');
-    setPreconditions('Saldo de R$ 5.000,00 na conta origem\nNúmero de token válido de autenticação\nConta destino ativa');
-    setSteps(
-      'Acessar o aplicativo do Banco | Tela de login é apresentada\n' +
-      'Fazer login na aplicação | Tela de transferência é apresentada\n' +
-      'Escolher a conta origem | Os dados da conta origem serão apresentados\n' +
-      'Escolher a conta destino | Os dados da conta destino serão apresentados\n' +
-      'Informar valor menor que R$ 5.000,00 | N/A\n' +
-      'Informar um token válido | N/A\n' +
-      'Submeter a transferência | Mensagem de sucesso da transferência'
+    if (!selectedProject) setSelectedProject('Sistema Hospitalar');
+    setTitle('Validar que uma consulta é agendada com sucesso para um paciente com dados válidos');
+    setPriority('Alta');
+    setTraceability('RN5');
+    setPreconditions(
+      'Paciente cadastrado no sistema\n' +
+      'Médico cadastrado e ativo\n' +
+      'Agenda do médico disponível\n' +
+      'Usuário com permissão para agendamento'
     );
-    setPostconditions('Conta origem terá débito equivalente ao valor transferido\nConta destino terá crédito equivalente ao valor transferido');
+    setSteps(
+      'Acessar o sistema hospitalar | Tela inicial do sistema é exibida\n' +
+      'Realizar login com usuário válido | Acesso ao sistema é concedido\n' +
+      'Acessar módulo de agendamento de consultas | Tela de agendamento é apresentada\n' +
+      'Selecionar o paciente | Dados do paciente são exibidos\n' +
+      'Selecionar o médico | Agenda do médico é exibida\n' +
+      'Escolher data e horário disponíveis | Horário é selecionado com sucesso\n' +
+      'Confirmar o agendamento | Consulta é registrada no sistema\n' +
+      'Visualizar confirmação | Mensagem de sucesso é exibida'
+    );
+    setPostconditions(
+      'Consulta registrada no sistema\n' +
+      'Horário bloqueado na agenda do médico\n' +
+      'Histórico do paciente atualizado\n' +
+      'Confirmação disponível para o usuário'
+    );
   };
 
   const clearForm = () => {
@@ -601,6 +634,9 @@ function App() {
     setError('');
     setTab('pt');
     setSelectedId(null);
+    setEditingId(null);
+    setShowNewProject(false);
+    setNewProjectName('');
   };
 
   const handleDelete = async (id, event) => {
@@ -615,6 +651,128 @@ function App() {
       if (selectedId === id) setSelectedId(updated.length > 0 ? updated[updated.length - 1].id : null);
       return updated;
     });
+    if (editingId === id) setEditingId(null);
+  };
+
+  const handleEdit = (id, event) => {
+    event.stopPropagation();
+    const entry = allTestCases.find(tc => tc.id === id);
+    if (!entry) return;
+    const pt = entry.pt;
+    setTitle(pt.title || '');
+    setPriority(pt.priority || 'Média');
+    setTraceability(pt.traceability || '');
+    setPreconditions((pt.preconditions || []).join('\n'));
+    setSteps((pt.steps || []).map(s => `${s.acao} | ${s.resultadoEsperado}`).join('\n'));
+    setPostconditions((pt.postconditions || []).join('\n'));
+    setEditingId(id);
+    setSelectedId(id);
+    setTab('pt');
+    setSelectedProject(entry.project || entry.pt?.project || '');
+  };
+
+  const handleUpdate = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const updatedPt = {
+        title,
+        priority,
+        traceability,
+        project: selectedProject,
+        preconditions: preconditions.split('\n').map(p => p.trim()).filter(Boolean),
+        steps: steps.split('\n').map((line, i) => {
+          const [acao, resultadoEsperado] = line.split('|').map(p => p.trim());
+          return { passo: i + 1, acao: acao || '', resultadoEsperado: resultadoEsperado || '' };
+        }).filter(s => s.acao),
+        postconditions: postconditions.split('\n').map(p => p.trim()).filter(Boolean)
+      };
+      const response = await fetch(`http://localhost:4000/test-cases/${editingId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedPt)
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Erro ao atualizar');
+      }
+      const savedPt = await response.json();
+      const [enCase, esCase] = await Promise.all([
+        translateTestCaseAPI(savedPt, 'en'),
+        translateTestCaseAPI(savedPt, 'es')
+      ]);
+      setAllTestCases(prev => prev.map(tc =>
+        tc.id === editingId ? { id: editingId, pt: savedPt, en: enCase, es: esCase } : tc
+      ));
+      setEditingId(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const navigate = useNavigate();
+
+  const handleCreateProject = async () => {
+    const name = newProjectName.trim();
+    if (!name) return;
+    try {
+      const res = await fetch('http://localhost:4000/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const saved = await res.json();
+      if (!res.ok) throw new Error(saved.error || 'Erro ao criar projeto');
+      setProjects(prev => [...prev, saved]);
+      setSelectedProject(saved.name);
+      setNewProjectName('');
+      setShowNewProject(false);
+    } catch (e) { setError(e.message); }
+  };
+
+  const handleRenameProject = async () => {
+    const name = editingProjectName.trim();
+    if (!name || !editingProjectId) return;
+    setProjectError('');
+    try {
+      const res = await fetch(`http://localhost:4000/projects/${editingProjectId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const updated = await res.json();
+      if (!res.ok) throw new Error(updated.error || 'Erro ao renomear projeto');
+      const oldName = projects.find(p => p.id === editingProjectId)?.name;
+      setProjects(prev => prev.map(p => p.id === editingProjectId ? updated : p));
+      setSelectedProject(updated.name);
+      // Atualizar o nome do projeto nos casos de teste já carregados na UI
+      if (oldName) {
+        setAllTestCases(prev => prev.map(tc => {
+          const proj = tc.project || tc.pt?.project;
+          if (proj !== oldName) return tc;
+          return {
+            ...tc,
+            project: updated.name,
+            pt: { ...tc.pt, project: updated.name }
+          };
+        }));
+      }
+      setEditingProjectId(null);
+      setEditingProjectName('');
+    } catch (e) { setProjectError(e.message); }
+  };
+
+  const handleDeleteProject = async (proj) => {
+    if (!window.confirm(`Excluir o projeto "${proj.name}"? Os casos de teste vinculados não serão excluídos.`)) return;
+    setProjectError('');
+    try {
+      await fetch(`http://localhost:4000/projects/${proj.id}`, { method: 'DELETE' });
+      setProjects(prev => prev.filter(p => p.id !== proj.id));
+      if (selectedProject === proj.name) setSelectedProject('');
+      if (projectFilter === proj.name) setProjectFilter('');
+    } catch (e) { setProjectError(e.message); }
   };
 
   const hasSidebar = allTestCases.length > 0;
@@ -630,8 +788,19 @@ function App() {
               <h3 style={{ margin: '0 0 12px 0', color: '#1976d2', fontSize: 15, borderBottom: '1px solid #e3eafc', paddingBottom: 8 }}>
                 Casos de Teste
               </h3>
+              {/* Project filter */}
+              <div style={{ marginBottom: 10 }}>
+                <select
+                  style={{ width: '100%', borderRadius: 6, border: '1px solid #bbb', padding: '5px 8px', fontSize: 12, color: '#333' }}
+                  value={projectFilter}
+                  onChange={e => setProjectFilter(e.target.value)}
+                >
+                  <option value=''>Todos os projetos</option>
+                  {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                </select>
+              </div>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {allTestCases.map(tc => (
+                {allTestCases.filter(tc => !projectFilter || (tc.project || tc.pt?.project) === projectFilter).map(tc => (
                   <li
                     key={tc.id}
                     onClick={() => setSelectedId(tc.id)}
@@ -651,27 +820,49 @@ function App() {
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ fontWeight: 700, color: '#1976d2', fontSize: 12 }}>{tc.id}</span>
+                      {(tc.project || tc.pt?.project) && (
+                        <span style={{ display: 'block', color: '#888', fontSize: 10, marginTop: 1 }}>📁 {tc.project || tc.pt?.project}</span>
+                      )}
                       <span style={{ display: 'block', color: '#333', fontSize: 12, marginTop: 2, wordBreak: 'break-word', whiteSpace: 'normal' }}>
                         {tc.pt.title}
                       </span>
                     </div>
-                    <button
-                      onClick={(e) => handleDelete(tc.id, e)}
-                      title="Excluir"
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        cursor: 'pointer',
-                        padding: '2px 4px',
-                        color: '#d32f2f',
-                        fontSize: 14,
-                        lineHeight: 1,
-                        flexShrink: 0,
-                        borderRadius: 4
-                      }}
-                    >
-                      🗑️
-                    </button>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <button
+                        onClick={(e) => handleEdit(tc.id, e)}
+                        title="Editar"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: '2px 4px',
+                          color: '#1976d2',
+                          fontSize: 14,
+                          lineHeight: 1,
+                          flexShrink: 0,
+                          borderRadius: 4
+                        }}
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={(e) => handleDelete(tc.id, e)}
+                        title="Excluir"
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: '2px 4px',
+                          color: '#d32f2f',
+                          fontSize: 14,
+                          lineHeight: 1,
+                          flexShrink: 0,
+                          borderRadius: 4
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -682,18 +873,89 @@ function App() {
         {/* Main content */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ background: '#fff', borderRadius: 12, boxShadow: '0 2px 16px #0001', padding: 32, marginBottom: 24 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <h1 style={{ marginBottom: 0, marginTop: 0 }}>SmartTest Marker</h1>
-              <img src="/logoSmartTestMaker.jpeg" alt="SmartTest Marker Logo" height="110" style={{ display: 'inline-block', marginLeft: 16 }} />
-            </div>
-            <div style={{ color: '#555', marginBottom: 24, fontSize: 18 }}>
-              Geração estruturada de casos de teste baseada na ISO-29119-3.<br />
-              <span style={{ display: 'inline-block', marginTop: 10 }}><b>Preencha os campos ou use o exemplo para experimentar.</b></span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <h1 style={{ marginBottom: 0, marginTop: 0, color: '#1976d2' }}>Gerador de Casos de Teste</h1>
+                <div style={{ color: '#555', marginTop: 10, fontSize: 18 }}>
+                  Geração estruturada de casos de teste baseada na ISO-29119-3.
+                </div>
+                <div style={{ color: '#555', marginTop: 12, fontSize: 16 }}>
+                  <b>Preencha os campos ou use o exemplo para experimentar.</b>
+                </div>
+              </div>
+              <img src="/logoSmartTestMaker.jpeg" alt="SmartTest Marker Logo" height="110" style={{ marginLeft: 16, flexShrink: 0 }} />
             </div>
             <hr style={{ margin: '24px 0' }} />
 
             {tab === 'pt' ? (
               <>
+                {/* Project selector */}
+                <div style={{ marginBottom: 20, background: '#f0f4ff', border: '1px solid #e3eafc', borderRadius: 8, padding: 16 }}>
+                  <label><b>Projeto</b></label>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+                    <select
+                      style={{ ...styles.input, marginBottom: 0, flex: 1 }}
+                      value={selectedProject}
+                      onChange={e => {
+                        if (e.target.value === '__new__') { setShowNewProject(true); setEditingProjectId(null); }
+                        else { setSelectedProject(e.target.value); setShowNewProject(false); setEditingProjectId(null); }
+                      }}
+                    >
+                      <option value=''>-- Selecione um projeto --</option>
+                      {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
+                      <option value='__new__'>+ Criar novo projeto...</option>
+                    </select>
+                    {selectedProject && !showNewProject && (() => {
+                      const proj = projects.find(p => p.name === selectedProject);
+                      return proj ? (
+                        <>
+                          <button
+                            title="Renomear projeto"
+                            onClick={() => { setEditingProjectId(proj.id); setEditingProjectName(proj.name); setShowNewProject(false); }}
+                            style={{ background: 'none', border: '1px solid #1976d2', borderRadius: 6, cursor: 'pointer', padding: '6px 8px', color: '#1976d2', fontSize: 14 }}
+                          >✏️</button>
+                          <button
+                            title="Excluir projeto"
+                            onClick={() => handleDeleteProject(proj)}
+                            style={{ background: 'none', border: '1px solid #d32f2f', borderRadius: 6, cursor: 'pointer', padding: '6px 8px', color: '#d32f2f', fontSize: 14 }}
+                          >🗑️</button>
+                        </>
+                      ) : null;
+                    })()}
+                  </div>
+                  {editingProjectId && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <input
+                        style={{ ...styles.input, marginBottom: 0, flex: 1 }}
+                        value={editingProjectName}
+                        onChange={e => { setEditingProjectName(e.target.value); setProjectError(''); }}
+                        placeholder='Novo nome do projeto'
+                        onKeyDown={e => e.key === 'Enter' && handleRenameProject()}
+                      />
+                      <button onClick={handleRenameProject} style={{ ...styles.primaryButton, padding: '8px 16px', fontSize: 14 }}>Salvar</button>
+                      <button onClick={() => { setEditingProjectId(null); setEditingProjectName(''); setProjectError(''); }} style={{ ...styles.clearButton, padding: '8px 16px', fontSize: 14 }}>Cancelar</button>
+                    </div>
+                  )}
+                  {projectError && (
+                    <div style={{ color: '#d32f2f', fontSize: 13, marginTop: 6, background: '#fff3f3', border: '1px solid #f5c6c6', borderRadius: 6, padding: '6px 10px' }}>
+                      {projectError}
+                    </div>
+                  )}
+                  {showNewProject && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <input
+                        style={{ ...styles.input, marginBottom: 0, flex: 1 }}
+                        value={newProjectName}
+                        onChange={e => setNewProjectName(e.target.value)}
+                        placeholder='Nome do novo projeto'
+                        onKeyDown={e => e.key === 'Enter' && handleCreateProject()}
+                      />
+                      <button onClick={handleCreateProject} style={{ ...styles.primaryButton, padding: '8px 16px', fontSize: 14 }}>Criar</button>
+                      <button onClick={() => { setShowNewProject(false); setNewProjectName(''); }} style={{ ...styles.clearButton, padding: '8px 16px', fontSize: 14 }}>Cancelar</button>
+                    </div>
+                  )}
+                </div>
+
                 <div style={{ marginBottom: 16 }}>
                   <label><b>Título do Teste</b></label>
                   <input style={styles.input} value={title} onChange={event => setTitle(event.target.value)} />
@@ -757,16 +1019,34 @@ function App() {
               />
             )}
 
-            <div style={{ display: 'flex', gap: 16, marginTop: 16 }}>
-              <button onClick={handleGenerate} disabled={loading || !title || !steps} style={styles.primaryButton}>
-                {loading ? 'Gerando...' : 'Gerar Caso de Teste'}
-              </button>
-              <button onClick={fillExample} style={styles.secondaryButton}>
-                Preencher Exemplo
-              </button>
-              <button onClick={clearForm} style={styles.clearButton}>
-                Limpar
-              </button>
+            {editingId && (
+              <div style={{ background: '#fff8e1', border: '1px solid #f9a825', borderRadius: 6, padding: '8px 14px', marginTop: 16, fontSize: 13, color: '#795548' }}>
+                ✏️ Editando caso de teste <b>{editingId}</b>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 16, marginTop: 16, flexWrap: 'wrap' }}>
+              {editingId ? (
+                <>
+                  <button onClick={handleUpdate} disabled={loading || !title || !steps} style={styles.primaryButton}>
+                    {loading ? 'Atualizando...' : 'Atualizar Caso de Teste'}
+                  </button>
+                  <button onClick={() => { setEditingId(null); clearForm(); }} style={styles.clearButton}>
+                    Cancelar Edição
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button onClick={handleGenerate} disabled={loading || !title || !steps} style={styles.primaryButton}>
+                    {loading ? 'Gerando...' : 'Gerar Caso de Teste'}
+                  </button>
+                  <button onClick={fillExample} style={styles.secondaryButton}>
+                    Preencher Exemplo
+                  </button>
+                  <button onClick={clearForm} style={styles.clearButton}>
+                    Limpar
+                  </button>
+                </>
+              )}
             </div>
 
             {error && <div style={styles.errorBox}>{error}</div>}
@@ -798,8 +1078,16 @@ function App() {
 
           <footer style={{ textAlign: 'center', color: '#888', marginTop: 32, fontSize: 15 }}>
             <hr style={{ margin: '32px 0 12px 0' }} />
+            <div style={{ marginBottom: 16 }}>
+              <button
+                onClick={() => navigate('/')}
+                style={{ background: '#1976d2', color: '#fff', border: 'none', borderRadius: 6, padding: '10px 32px', fontWeight: 600, fontSize: 15, cursor: 'pointer' }}
+              >
+                ← Voltar ao Menu Principal
+              </button>
+            </div>
             <div>
-              <b>SmartTest Marker</b> - Projeto acadêmico para geração de casos de teste estruturados.<br />
+              <b>SmartTest Marker</b> - Projeto acadêmico para geração de documentos de teste estruturados.<br />
               Desenvolvido por Patricia da Silva Gomes baseado no material da Mentoria do Julio de Lima - {new Date().getFullYear()}
             </div>
           </footer>
