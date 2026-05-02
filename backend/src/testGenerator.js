@@ -20,7 +20,10 @@ function loadMaxId() {
     if (!fs.existsSync(filePath)) return 0;
     const cases = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     if (!Array.isArray(cases) || cases.length === 0) return 0;
-    return Math.max(...cases.map(tc => Number(tc.id) || 0));
+    return Math.max(...cases.map(tc => {
+      const match = String(tc.id).match(/^TC-(\d+)$/);
+      return match ? parseInt(match[1], 10) : (Number(tc.id) || 0);
+    }));
   } catch {
     return 0;
   }
@@ -40,7 +43,8 @@ export async function generateTestCases(input) {
   } = input;
 
   const testCase = {
-    id: input.id || testCaseCounter++,
+    id: input.id || 'TC-' + String(testCaseCounter++).padStart(3, '0'),
+    project: input.project || '',
     title: title || 'Caso de Teste sem Título',
     priority,
     traceability,

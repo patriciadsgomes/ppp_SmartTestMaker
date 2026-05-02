@@ -1,27 +1,98 @@
 openapi: 3.0.0
 info:
-  title: SmatTest Marker API
-  version: 1.0.0
-  description: API for generating test cases
+  title: SmartTest Marker API
+  version: 2.0.0
+  description: API para geração de documentos de teste estruturados baseados na ISO-29119-3
 servers:
   - url: http://localhost:4000
+tags:
+  - name: Casos de Teste
+    description: Geração e gerenciamento de Casos de Teste
+  - name: Relatórios de Sessão
+    description: Geração e gerenciamento de Relatórios de Sessão
+  - name: Condições de Teste
+    description: Geração e gerenciamento de Condições de Teste
+
 paths:
-  /generate-tests:
-    post:
-      summary: Generate test cases
+  # ── Casos de Teste ──────────────────────────────────────────────────────────
+  /test-cases:
+    get:
+      tags: [Casos de Teste]
+      summary: Listar todos os casos de teste
+      responses:
+        '200':
+          description: Lista de casos de teste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TestCase'
+
+  /test-cases/{id}:
+    put:
+      tags: [Casos de Teste]
+      summary: Atualizar um caso de teste pelo ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: ID do caso de teste (ex: TC-001)
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                specification:
-                  type: string
-                  example: "Login functionality for an e-commerce website."
+              $ref: '#/components/schemas/TestCaseInput'
       responses:
         '200':
-          description: Successful response
+          description: Caso de teste atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestCase'
+        '404':
+          description: Caso de teste não encontrado
+        '500':
+          description: Erro interno
+    delete:
+      tags: [Casos de Teste]
+      summary: Excluir um caso de teste pelo ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: ID do caso de teste (ex: TC-001)
+      responses:
+        '200':
+          description: Caso de teste excluído
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '500':
+          description: Erro interno
+
+  /generate-tests:
+    post:
+      tags: [Casos de Teste]
+      summary: Gerar um caso de teste estruturado
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestCaseInput'
+      responses:
+        '200':
+          description: Caso de teste gerado com sucesso
           content:
             application/json:
               schema:
@@ -32,21 +103,312 @@ paths:
                     items:
                       $ref: '#/components/schemas/TestCase'
         '400':
-          description: Bad request
+          description: Requisição inválida
         '500':
-          description: Internal server error
+          description: Erro interno
+
+  # ── Relatórios de Sessão ────────────────────────────────────────────────────
+  /session-reports:
+    get:
+      tags: [Relatórios de Sessão]
+      summary: Listar todos os relatórios de sessão
+      responses:
+        '200':
+          description: Lista de relatórios de sessão
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SessionReport'
+    post:
+      tags: [Relatórios de Sessão]
+      summary: Criar um novo relatório de sessão
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionReportInput'
+      responses:
+        '201':
+          description: Relatório criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionReport'
+        '500':
+          description: Erro interno
+
+  /session-reports/{id}:
+    put:
+      tags: [Relatórios de Sessão]
+      summary: Atualizar um relatório de sessão pelo ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: ID do relatório (ex: SR-001)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionReportInput'
+      responses:
+        '200':
+          description: Relatório atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionReport'
+        '404':
+          description: Relatório não encontrado
+        '500':
+          description: Erro interno
+    delete:
+      tags: [Relatórios de Sessão]
+      summary: Excluir um relatório de sessão pelo ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: ID do relatório (ex: SR-001)
+      responses:
+        '200':
+          description: Relatório excluído
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '500':
+          description: Erro interno
+
+  # ── Condições de Teste ──────────────────────────────────────────────────────
+  /test-conditions:
+    get:
+      tags: [Condições de Teste]
+      summary: Listar todas as condições de teste
+      responses:
+        '200':
+          description: Lista de condições de teste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TestConditionsDoc'
+    post:
+      tags: [Condições de Teste]
+      summary: Criar um novo documento de condições de teste
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestConditionsInput'
+      responses:
+        '201':
+          description: Documento criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestConditionsDoc'
+        '500':
+          description: Erro interno
+
+  /test-conditions/{id}:
+    put:
+      tags: [Condições de Teste]
+      summary: Atualizar um documento de condições de teste pelo ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: ID do documento (ex: CT-001)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestConditionsInput'
+      responses:
+        '200':
+          description: Documento atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestConditionsDoc'
+        '404':
+          description: Documento não encontrado
+        '500':
+          description: Erro interno
+    delete:
+      tags: [Condições de Teste]
+      summary: Excluir um documento de condições de teste pelo ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: ID do documento (ex: CT-001)
+      responses:
+        '200':
+          description: Documento excluído
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '500':
+          description: Erro interno
+
 components:
   schemas:
-    TestCase:
+    # ── Casos de Teste ──────────────────────────────────────────────────────
+    TestCaseInput:
       type: object
+      required: [title, steps]
       properties:
         title:
           type: string
+          example: Validar transferência abaixo de R$ 5.000,00 com token
+        priority:
+          type: string
+          enum: [Baixa, Média, Alta]
+          example: Média
+        traceability:
+          type: string
+          example: RN2
         preconditions:
-          type: string
-        description:
-          type: string
-        steps:
           type: array
           items:
             type: string
+          example: ["Saldo disponível na conta", "Token válido"]
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              action:
+                type: string
+              expectedResult:
+                type: string
+          example:
+            - action: Acessar o aplicativo
+              expectedResult: Tela de login exibida
+        postconditions:
+          type: array
+          items:
+            type: string
+          example: ["Saldo debitado da conta origem"]
+    TestCase:
+      allOf:
+        - $ref: '#/components/schemas/TestCaseInput'
+        - type: object
+          properties:
+            id:
+              type: string
+              example: TC-001
+
+    # ── Relatórios de Sessão ────────────────────────────────────────────────
+    SessionReportInput:
+      type: object
+      required: [tester, module, charter]
+      properties:
+        date:
+          type: string
+          format: date-time
+          example: "2025-01-12T12:20"
+        tester:
+          type: string
+          example: Júlio de Lima
+        module:
+          type: string
+          example: Transferências
+        charter:
+          type: object
+          properties:
+            text:
+              type: string
+              example: "Explore a Funcionalidade de Transferência de Valores\nCom a Heurística de Sabedoria em Testes\nPara descobrir se o software lida bem com ações contrárias"
+        sessionSize:
+          type: string
+          example: 10 minutos
+        notes:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [I, R]
+              text:
+                type: string
+          example:
+            - type: I
+              text: Consegui fazer uma transferência para a própria conta
+            - type: R
+              text: Usuários podem continuar fazendo transferências indevidamente
+        defects:
+          type: array
+          items:
+            type: string
+          example: ["Label do campo Token incorreto"]
+        questions:
+          type: array
+          items:
+            type: string
+          example: ["Deveria ser possível transferir para a conta origem?"]
+    SessionReport:
+      allOf:
+        - $ref: '#/components/schemas/SessionReportInput'
+        - type: object
+          properties:
+            id:
+              type: string
+              example: SR-001
+
+    # ── Condições de Teste ──────────────────────────────────────────────────
+    TestConditionsInput:
+      type: object
+      required: [requirements, conditions]
+      properties:
+        requirements:
+          type: string
+          example: RN2
+        conditions:
+          type: array
+          items:
+            type: object
+            properties:
+              condId:
+                type: integer
+                example: 1
+              description:
+                type: string
+                example: Os limites de valor referentes a Transferência
+              priority:
+                type: string
+                enum: [Alta, Média, Baixa]
+                example: Alta
+    TestConditionsDoc:
+      allOf:
+        - $ref: '#/components/schemas/TestConditionsInput'
+        - type: object
+          properties:
+            id:
+              type: string
+              example: CT-001
