@@ -1,7 +1,7 @@
 # SmartTest Marker
 
 Projeto acadêmico para geração de casos de teste estruturados.
-Desenvolvido por Patricia da Silva Gomes baseado no material da Mentoria do ![Julio de Lima](https://github.com/juliodelimas/).
+Desenvolvido por Patricia da Silva Gomes baseado no material da Mentoria do [Julio de Lima](https://github.com/juliodelimas/).
 
 Aplicação web para geração estruturada de casos de teste baseada na norma **ISO-29119-3**, com suporte a múltiplos idiomas (Português, Inglês e Espanhol), persistência de dados, exportação de relatórios e interface intuitiva.
 
