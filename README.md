@@ -5,7 +5,7 @@ Desenvolvido por Patricia da Silva Gomes baseado no material da Mentoria do [Jul
 
 Aplicação web para geração estruturada de casos de teste baseada na norma **ISO-29119-3**, com suporte a múltiplos idiomas (Português, Inglês e Espanhol), persistência de dados, exportação de relatórios e interface intuitiva.
 
-![SmartTest Marker Logo](backend/frontend/public/logoSmartTestMaker.jpeg)
+<img src="frontend/public/logoSmartTestMaker.jpeg" alt="SmartTest Marker Logo" width="200" />
 
 ---
 
