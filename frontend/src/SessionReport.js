@@ -2,34 +2,83 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { authFetch } from './auth';
+import UserHeader from './UserHeader';
+
+async function translateText(text, from = 'pt', to = 'en') {
+  if (!text || !text.trim()) return '';
+  const lines = text.split('\n');
+  try {
+    const translatedLines = await Promise.all(
+      lines.map(async (line) => {
+        if (!line.trim()) return line;
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${from}&tl=${to}&dt=t&q=${encodeURIComponent(line)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const translated = Array.isArray(data[0]) ? data[0].map(chunk => chunk[0] || '').join('') : null;
+        return translated || line;
+      })
+    );
+    return translatedLines.join('\n');
+  } catch {
+    return text;
+  }
+}
+
+async function translateReport(report, to = 'en') {
+  const [module, charterText, sessionSize, translatedNotes, translatedDefects, translatedQuestions] = await Promise.all([
+    translateText(report.module, 'pt', to),
+    translateText(report.charter?.text, 'pt', to),
+    translateText(report.sessionSize, 'pt', to),
+    Promise.all((report.notes || []).map(async n => ({ ...n, text: await translateText(n.text, 'pt', to) }))),
+    Promise.all((report.defects || []).map(d => translateText(d, 'pt', to))),
+    Promise.all((report.questions || []).map(q => translateText(q, 'pt', to))),
+  ]);
+  return {
+    ...report,
+    module,
+    charter: { ...report.charter, text: charterText },
+    sessionSize,
+    notes: translatedNotes,
+    defects: translatedDefects,
+    questions: translatedQuestions,
+  };
+}
+
+const REPORT_LABELS = {
+  pt: { headerTitle: 'SmartTest Marker — Relatório de Sessão', startDate: 'Data e Hora do Início', tester: 'Nome do Testador', module: 'Módulo', charter: 'Test Charter', sessionSize: 'Tamanho da Sessão', notes: 'Notas', noteType: 'Tipo', noteText: 'Nota', defects: 'Defeitos', questions: 'Perguntas' },
+  en: { headerTitle: 'SmartTest Marker — Session Report', startDate: 'Start Date and Time', tester: 'Tester Name', module: 'Module', charter: 'Test Charter', sessionSize: 'Session Size', notes: 'Notes', noteType: 'Type', noteText: 'Note', defects: 'Defects', questions: 'Questions' },
+  es: { headerTitle: 'SmartTest Marker — Informe de Sesión', startDate: 'Fecha y Hora de Inicio', tester: 'Nombre del Tester', module: 'Módulo', charter: 'Test Charter', sessionSize: 'Tamaño de la Sesión', notes: 'Notas', noteType: 'Tipo', noteText: 'Nota', defects: 'Defectos', questions: 'Preguntas' },
+};
 
 const SESSION_SIZES = ['10 minutos', '20 minutos', '30 minutos', '45 minutos', '60 minutos', '90 minutos'];
 const NOTE_TYPES = ['I', 'R'];
 
 // ── Export helpers ──────────────────────────────────────────────────────────
 
-function exportTXT(report) {
+function exportTXT(report, language = 'pt') {
+  const L = REPORT_LABELS[language] || REPORT_LABELS.pt;
   const lines = [
     '====================================',
-    '       RELATÓRIO DE SESSÃO DE TESTE',
+    `       ${L.headerTitle.toUpperCase()}`,
     '====================================',
     `ID: ${report.id}`,
-    `Data e Hora do Início: ${report.date}`,
-    `Nome do Testador: ${report.tester}`,
-    `Módulo: ${report.module}`,
+    `${L.startDate}: ${report.date}`,
+    `${L.tester}: ${report.tester}`,
+    `${L.module}: ${report.module}`,
     '',
-    '── TEST CHARTER ──────────────────────',
+    `── ${L.charter.toUpperCase()} ──────────────────────`,
     ...(report.charter.text || '').split('\n').map(l => l),
     '',
-    `Tamanho da Sessão: ${report.sessionSize}`,
+    `${L.sessionSize}: ${report.sessionSize}`,
     '',
-    '── NOTAS ─────────────────────────────',
+    `── ${L.notes.toUpperCase()} ─────────────────────────────`,
     ...(report.notes || []).map(n => `(${n.type}) ${n.text}`),
     '',
-    '── DEFEITOS ──────────────────────────',
+    `── ${L.defects.toUpperCase()} ──────────────────────────`,
     ...(report.defects || []).map((d, i) => `${i + 1}. ${d}`),
     '',
-    '── PERGUNTAS ─────────────────────────',
+    `── ${L.questions.toUpperCase()} ─────────────────────────`,
     ...(report.questions || []).map((q, i) => `${i + 1}. ${q}`),
   ];
   const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
@@ -41,10 +90,11 @@ function exportTXT(report) {
   URL.revokeObjectURL(url);
 }
 
-function exportCSV(report) {
+function exportCSV(report, language = 'pt') {
+  const L = REPORT_LABELS[language] || REPORT_LABELS.pt;
   const escape = v => `"${String(v || '').replace(/"/g, '""')}"`;
   const rows = [
-    ['ID', 'Data/Hora', 'Testador', 'Módulo', 'Test Charter', 'Tamanho', 'Tipo Nota', 'Nota', 'Defeito', 'Pergunta'].map(escape),
+    ['ID', L.startDate, L.tester, L.module, L.charter, L.sessionSize, L.noteType, L.noteText, L.defects, L.questions].map(escape),
     ...(report.notes || [{ type: '', text: '' }]).map((n, i) => [
       escape(report.id),
       escape(report.date),
@@ -67,7 +117,8 @@ function exportCSV(report) {
   URL.revokeObjectURL(url);
 }
 
-function exportPDF(report) {
+function exportPDF(report, language = 'pt') {
+  const L = REPORT_LABELS[language] || REPORT_LABELS.pt;
   const doc = new jsPDF();
   const margin = 14;
   const pageW = doc.internal.pageSize.getWidth();
@@ -84,7 +135,7 @@ function exportPDF(report) {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
   doc.setTextColor(255, 255, 255);
-  doc.text('SmartTest Marker — Relatório de Sessão', margin + 4, y + 9.5);
+  doc.text(L.headerTitle, margin + 4, y + 9.5);
   y += 20;
 
   const fieldRow = (label, value) => {
@@ -123,29 +174,29 @@ function exportPDF(report) {
 
   // Header fields
   fieldRow('ID', report.id);
-  fieldRow('Data e Hora do Início', report.date);
-  fieldRow('Nome do Testador', report.tester);
-  fieldRow('Módulo', report.module);
+  fieldRow(L.startDate, report.date);
+  fieldRow(L.tester, report.tester);
+  fieldRow(L.module, report.module);
   y += 2;
 
   // Charter
-  sectionTitle('Test Charter');
+  sectionTitle(L.charter);
   if (y > 260) { doc.addPage(); y = 14; }
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(...textDark);
   const charterLines = doc.splitTextToSize(String(report.charter.text || ''), contentW - 6);
   doc.text(charterLines, margin + 3, y);
   y += 5.5 * charterLines.length + 4;
 
-  fieldRow('Tamanho da Sessão', report.sessionSize);
+  fieldRow(L.sessionSize, report.sessionSize);
   y += 2;
 
   // Notes
-  sectionTitle('Notas');
+  sectionTitle(L.notes);
   if (report.notes && report.notes.length > 0) {
     autoTable(doc, {
       startY: y,
       margin: { left: margin, right: margin },
-      head: [['Tipo', 'Nota']],
+      head: [[L.noteType, L.noteText]],
       body: report.notes.map(n => [`(${n.type})`, n.text]),
       headStyles: { fillColor: blue, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 },
       bodyStyles: { fontSize: 10, textColor: textDark },
@@ -157,18 +208,18 @@ function exportPDF(report) {
   }
 
   // Defects
-  sectionTitle('Defeitos');
+  sectionTitle(L.defects);
   bulletList(report.defects || []);
 
   // Questions
-  sectionTitle('Perguntas');
+  sectionTitle(L.questions);
   bulletList(report.questions || []);
 
   doc.save(`relatorio-sessao-${report.id}.pdf`);
 }
 
 // ── Export dropdown button ──────────────────────────────────────────────────
-function ExportButton({ report }) {
+function ExportButton({ report, language = 'pt' }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
     const handler = e => { if (!e.target.closest('#export-dd')) setOpen(false); };
@@ -180,7 +231,7 @@ function ExportButton({ report }) {
       <button onClick={() => setOpen(o => !o)} style={btnStyles.export}>⬇ Exportar</button>
       {open && (
         <div style={{ position: 'absolute', right: 0, top: '110%', background: '#fff', border: '1px solid #ddd', borderRadius: 8, boxShadow: '0 4px 16px #0002', zIndex: 100, minWidth: 130 }}>
-          {[['PDF', () => exportPDF(report)], ['TXT', () => exportTXT(report)], ['CSV', () => exportCSV(report)]].map(([label, fn]) => (
+          {[['PDF', () => exportPDF(report, language)], ['TXT', () => exportTXT(report, language)], ['CSV', () => exportCSV(report, language)]].map(([label, fn]) => (
             <button key={label} onClick={() => { fn(); setOpen(false); }}
               style={{ display: 'block', width: '100%', padding: '10px 18px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontWeight: 600, fontSize: 14, color: '#333' }}
               onMouseEnter={e => e.currentTarget.style.background = '#f0f4ff'}
@@ -194,26 +245,27 @@ function ExportButton({ report }) {
 }
 
 // ── Report card (read-only display) ────────────────────────────────────────
-function ReportCard({ report }) {
+function ReportCard({ report, language = 'pt' }) {
+  const L = REPORT_LABELS[language] || REPORT_LABELS.pt;
   return (
     <div style={cardStyle}>
       <div style={rowStyle}><b>ID:</b> {report.id}</div>
-      <div style={rowStyle}><b>Data e Hora do Início:</b> {report.date}</div>
-      <div style={rowStyle}><b>Nome do Testador:</b> {report.tester}</div>
-      <div style={rowStyle}><b>Módulo:</b> {report.module}</div>
+      <div style={rowStyle}><b>{L.startDate}:</b> {report.date}</div>
+      <div style={rowStyle}><b>{L.tester}:</b> {report.tester}</div>
+      <div style={rowStyle}><b>{L.module}:</b> {report.module}</div>
 
-      <div style={sectionTitleStyle}>Test Charter</div>
+      <div style={sectionTitleStyle}>{L.charter}</div>
       <div style={{ ...rowStyle, whiteSpace: 'pre-line' }}>{report.charter.text}</div>
 
-      <div style={sectionTitleStyle}>Tamanho da Sessão</div>
+      <div style={sectionTitleStyle}>{L.sessionSize}</div>
       <div style={rowStyle}>{report.sessionSize}</div>
 
-      <div style={sectionTitleStyle}>Notas</div>
+      <div style={sectionTitleStyle}>{L.notes}</div>
       <table style={tableStyle}>
         <thead>
           <tr style={{ background: '#e3eafc' }}>
-            <th style={thStyle}>Tipo</th>
-            <th style={thStyle}>Nota</th>
+            <th style={thStyle}>{L.noteType}</th>
+            <th style={thStyle}>{L.noteText}</th>
           </tr>
         </thead>
         <tbody>
@@ -226,10 +278,10 @@ function ReportCard({ report }) {
         </tbody>
       </table>
 
-      <div style={sectionTitleStyle}>Defeitos</div>
+      <div style={sectionTitleStyle}>{L.defects}</div>
       <ul>{(report.defects || []).map((d, i) => <li key={i}>{d}</li>)}</ul>
 
-      <div style={sectionTitleStyle}>Perguntas</div>
+      <div style={sectionTitleStyle}>{L.questions}</div>
       <ul>{(report.questions || []).map((q, i) => <li key={i}>{q}</li>)}</ul>
     </div>
   );
@@ -255,6 +307,7 @@ export default function SessionReport() {
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [tab, setTab] = useState('pt');
 
   // projects
   const [projects, setProjects] = useState([]);
@@ -265,27 +318,39 @@ export default function SessionReport() {
   const [editingProjectId, setEditingProjectId] = useState(null);
   const [editingProjectName, setEditingProjectName] = useState('');
   const [projectError, setProjectError] = useState('');
+  const [sidebarPage, setSidebarPage] = useState(1);
+  const SIDEBAR_PAGE_SIZE = 10;
 
-  const selectedReport = allReports.find(r => r.id === selectedId) || null;
+  const selectedEntry = allReports.find(r => r.id === selectedId) || null;
 
   // Load saved reports
   useEffect(() => {
-    fetch('http://localhost:4000/projects')
+    authFetch('http://localhost:4000/projects')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setProjects(data); })
       .catch(() => {});
   }, []);
 
   useEffect(() => {
-    fetch('http://localhost:4000/session-reports')
-      .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data) && data.length > 0) {
-          setAllReports(data);
-          setSelectedId(data[data.length - 1].id);
-        }
-      })
-      .catch(() => {});
+    async function loadReports() {
+      try {
+        const res = await authFetch('http://localhost:4000/session-reports');
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) return;
+        const entries = await Promise.all(
+          data.map(async (ptReport) => {
+            const [enReport, esReport] = await Promise.all([
+              translateReport(ptReport, 'en'),
+              translateReport(ptReport, 'es'),
+            ]);
+            return { id: ptReport.id, pt: ptReport, en: enReport, es: esReport };
+          })
+        );
+        setAllReports(entries);
+        setSelectedId(entries[entries.length - 1].id);
+      } catch {}
+    }
+    loadReports();
   }, []);
 
   const buildPayload = () => ({
@@ -314,14 +379,19 @@ export default function SessionReport() {
   const handleSave = async () => {
     setLoading(true); setError('');
     try {
-      const res = await fetch('http://localhost:4000/session-reports', {
+      const res = await authFetch('http://localhost:4000/session-reports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(buildPayload()),
       });
       const saved = await res.json();
       if (!res.ok) throw new Error(saved.error || 'Erro ao salvar');
-      setAllReports(prev => [...prev, saved]);
+      const [enReport, esReport] = await Promise.all([
+        translateReport(saved, 'en'),
+        translateReport(saved, 'es'),
+      ]);
+      const newEntry = { id: saved.id, pt: saved, en: enReport, es: esReport };
+      setAllReports(prev => [...prev, newEntry]);
       setSelectedId(saved.id);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -330,14 +400,18 @@ export default function SessionReport() {
   const handleUpdate = async () => {
     setLoading(true); setError('');
     try {
-      const res = await fetch(`http://localhost:4000/session-reports/${editingId}`, {
+      const res = await authFetch(`http://localhost:4000/session-reports/${editingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(buildPayload()),
       });
       const saved = await res.json();
       if (!res.ok) throw new Error(saved.error || 'Erro ao atualizar');
-      setAllReports(prev => prev.map(r => r.id === editingId ? saved : r));
+      const [enReport, esReport] = await Promise.all([
+        translateReport(saved, 'en'),
+        translateReport(saved, 'es'),
+      ]);
+      setAllReports(prev => prev.map(r => r.id === editingId ? { id: editingId, pt: saved, en: enReport, es: esReport } : r));
       setEditingId(null);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -345,7 +419,7 @@ export default function SessionReport() {
 
   const handleDelete = async (id, e) => {
     e.stopPropagation();
-    try { await fetch(`http://localhost:4000/session-reports/${id}`, { method: 'DELETE' }); } catch {}
+    try { await authFetch(`http://localhost:4000/session-reports/${id}`, { method: 'DELETE' }); } catch {}
     setAllReports(prev => {
       const updated = prev.filter(r => r.id !== id);
       if (selectedId === id) setSelectedId(updated.length > 0 ? updated[updated.length - 1].id : null);
@@ -356,8 +430,9 @@ export default function SessionReport() {
 
   const handleEdit = (id, e) => {
     e.stopPropagation();
-    const r = allReports.find(rep => rep.id === id);
-    if (!r) return;
+    const entry = allReports.find(rep => rep.id === id);
+    if (!entry) return;
+    const r = entry.pt;
     setDate(r.date || '');
     setTester(r.tester || '');
     setModule(r.module || '');
@@ -420,7 +495,7 @@ export default function SessionReport() {
     if (!name) return;
     setProjectError('');
     try {
-      const res = await fetch('http://localhost:4000/projects', {
+      const res = await authFetch('http://localhost:4000/projects', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       });
@@ -437,7 +512,7 @@ export default function SessionReport() {
     if (!name || !editingProjectId) return;
     setProjectError('');
     try {
-      const res = await fetch(`http://localhost:4000/projects/${editingProjectId}`, {
+      const res = await authFetch(`http://localhost:4000/projects/${editingProjectId}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       });
@@ -446,7 +521,7 @@ export default function SessionReport() {
       const oldName = projects.find(p => p.id === editingProjectId)?.name;
       setProjects(prev => prev.map(p => p.id === editingProjectId ? updated : p));
       setSelectedProject(updated.name);
-      if (oldName) setAllReports(prev => prev.map(r => r.project === oldName ? { ...r, project: updated.name } : r));
+      if (oldName) setAllReports(prev => prev.map(r => r.pt?.project !== oldName ? r : { ...r, pt: { ...r.pt, project: updated.name } }));
       setEditingProjectId(null); setEditingProjectName('');
     } catch (e) { setProjectError(e.message); }
   };
@@ -455,7 +530,7 @@ export default function SessionReport() {
     if (!window.confirm(`Excluir o projeto "${proj.name}"? Os relatórios vinculados não serão excluídos.`)) return;
     setProjectError('');
     try {
-      await fetch(`http://localhost:4000/projects/${proj.id}`, { method: 'DELETE' });
+      await authFetch(`http://localhost:4000/projects/${proj.id}`, { method: 'DELETE' });
       setProjects(prev => prev.filter(p => p.id !== proj.id));
       if (selectedProject === proj.name) setSelectedProject('');
       if (projectFilter === proj.name) setProjectFilter('');
@@ -464,6 +539,7 @@ export default function SessionReport() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f6f8fa', padding: 0, margin: 0 }}>
+      <UserHeader />
       <div style={{ maxWidth: hasSidebar ? 1120 : 800, margin: '40px auto', fontFamily: 'sans-serif', display: 'flex', gap: 24, alignItems: 'flex-start', padding: '0 16px' }}>
 
         {/* Sidebar */}
@@ -474,20 +550,26 @@ export default function SessionReport() {
               {/* Project filter */}
               <div style={{ marginBottom: 10 }}>
                 <select style={{ width: '100%', borderRadius: 6, border: '1px solid #bbb', padding: '5px 8px', fontSize: 12, color: '#333' }}
-                  value={projectFilter} onChange={e => setProjectFilter(e.target.value)}>
+                  value={projectFilter} onChange={e => { setProjectFilter(e.target.value); setSidebarPage(1); }}>
                   <option value=''>Todos os projetos</option>
                   {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                 </select>
               </div>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {allReports.filter(r => !projectFilter || r.project === projectFilter).map(r => (
+                {(() => {
+                  const filtered = allReports.filter(r => !projectFilter || r.pt?.project === projectFilter);
+                  const totalPages = Math.ceil(filtered.length / SIDEBAR_PAGE_SIZE);
+                  const page = Math.min(sidebarPage, totalPages || 1);
+                  const paginated = filtered.slice((page - 1) * SIDEBAR_PAGE_SIZE, page * SIDEBAR_PAGE_SIZE);
+                  return (<>
+                    {paginated.map(r => (
                   <li key={r.id} onClick={() => setSelectedId(r.id)}
                     style={{ padding: '8px 10px', borderRadius: 6, marginBottom: 6, cursor: 'pointer', background: selectedId === r.id ? '#e3eafc' : '#f6f8fa', border: selectedId === r.id ? '1.5px solid #1976d2' : '1px solid #ddd', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6 }}
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ fontWeight: 700, color: '#1976d2', fontSize: 12 }}>{r.id}</span>
-                      {r.project && <span style={{ display: 'block', color: '#888', fontSize: 10, marginTop: 1 }}>📁 {r.project}</span>}
-                      <span style={{ display: 'block', color: '#333', fontSize: 12, marginTop: 2, wordBreak: 'break-word' }}>{r.module}</span>
+                      {r.pt?.project && <span style={{ display: 'block', color: '#888', fontSize: 10, marginTop: 1 }}>📁 {r.pt.project}</span>}
+                      <span style={{ display: 'block', color: '#333', fontSize: 12, marginTop: 2, wordBreak: 'break-word' }}>{r.pt?.module}</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <button onClick={(e) => handleEdit(r.id, e)} title="Editar" style={btnStyles.icon}>✏️</button>
@@ -495,6 +577,17 @@ export default function SessionReport() {
                     </div>
                   </li>
                 ))}
+                    {totalPages > 1 && (
+                      <li style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 8, borderTop: '1px solid #e3eafc' }}>
+                        <button onClick={() => setSidebarPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+                          style={{ background: 'none', border: '1px solid #bbb', borderRadius: 4, padding: '2px 8px', cursor: page <= 1 ? 'default' : 'pointer', color: page <= 1 ? '#bbb' : '#1976d2', fontSize: 13 }}>‹</button>
+                        <span style={{ fontSize: 11, color: '#888' }}>{page}/{totalPages}</span>
+                        <button onClick={() => setSidebarPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+                          style={{ background: 'none', border: '1px solid #bbb', borderRadius: 4, padding: '2px 8px', cursor: page >= totalPages ? 'default' : 'pointer', color: page >= totalPages ? '#bbb' : '#1976d2', fontSize: 13 }}>›</button>
+                      </li>
+                    )}
+                  </>);
+                })()}
               </ul>
             </div>
           </div>
@@ -698,13 +791,18 @@ export default function SessionReport() {
             {error && <div style={errorStyle}>{error}</div>}
 
             {/* Report display */}
-            {selectedReport && (
+            {selectedEntry && (
               <div style={{ marginTop: 32 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                   <h2 style={{ color: '#1976d2', margin: 0 }}>Relatório de Sessão Gerado</h2>
-                  <ExportButton report={selectedReport} />
+                  <ExportButton report={selectedEntry[tab] || selectedEntry.pt} language={tab} />
                 </div>
-                <ReportCard report={selectedReport} />
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                  <button onClick={() => setTab('pt')} style={tab === 'pt' ? btnStyles.activeTab : btnStyles.tab}>Português</button>
+                  <button onClick={() => setTab('en')} style={tab === 'en' ? btnStyles.activeTab : btnStyles.tab}>English</button>
+                  <button onClick={() => setTab('es')} style={tab === 'es' ? btnStyles.activeTab : btnStyles.tab}>Español</button>
+                </div>
+                <ReportCard report={selectedEntry[tab] || selectedEntry.pt} language={tab} />
               </div>
             )}
           </div>
@@ -746,6 +844,8 @@ const btnStyles = {
   addItem: { background: 'none', color: '#1976d2', border: '1px dashed #1976d2', borderRadius: 6, padding: '5px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginTop: 4 },
   remove: { background: 'none', border: 'none', color: '#d32f2f', fontWeight: 700, fontSize: 16, cursor: 'pointer', flexShrink: 0, padding: '4px 6px' },
   icon: { background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: '#1976d2', fontSize: 14, lineHeight: 1, flexShrink: 0, borderRadius: 4 },
+  tab: { background: '#f0f4ff', color: '#1976d2', border: '1px solid #1976d2', borderRadius: 6, padding: '6px 18px', fontWeight: 600, fontSize: 14, cursor: 'pointer' },
+  activeTab: { background: '#1976d2', color: '#fff', border: '1px solid #1976d2', borderRadius: 6, padding: '6px 18px', fontWeight: 600, fontSize: 14, cursor: 'pointer' },
 };
 
 const actionBtnStyle = (color) => ({

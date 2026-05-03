@@ -75,5 +75,50 @@
       "Existe alguma regra para limite de consultas por paciente por dia?",
       "Como o sistema deve se comportar em casos de conflito de agenda?"
     ]
+  },
+  {
+    "id": "SR-003",
+    "date": "2026-03-20T10:20",
+    "tester": "Maria Gomes",
+    "module": "Agendamento de Consultas",
+    "project": "Sistema Hospitalar - Agendamento de Consulta",
+    "charter": {
+      "text": "Explore a funcionalidade de agendamento de consultas\nCom a heurística de testes focada em validação de regras de negócio e comportamento inesperado\nPara descobrir se o sistema lida corretamente com situações inválidas ou inconsistentes no agendamento"
+    },
+    "sessionSize": "30 minutos",
+    "notes": [
+      {
+        "type": "I",
+        "text": "Consegui agendar uma consulta para o mesmo paciente no mesmo horário com o mesmo médico"
+      },
+      {
+        "type": "I",
+        "text": "O sistema não apresentou nenhuma validação de conflito de agenda"
+      },
+      {
+        "type": "I",
+        "text": "Tentei agendar uma consulta com data no passado e o sistema permitiu"
+      },
+      {
+        "type": "R",
+        "text": "Se múltiplas consultas forem agendadas no mesmo horário, pode gerar conflitos graves no atendimento"
+      },
+      {
+        "type": "R",
+        "text": "Permitir agendamento em datas passadas pode comprometer relatórios e histórico médico"
+      }
+    ],
+    "defects": [
+      "O sistema permite agendamento duplicado para o mesmo horário e médico",
+      "É possível agendar consultas em datas passadas",
+      "Falta validação de conflito de agenda",
+      "Feedback visual de sucesso é pouco claro ou inexistente",
+      "Não há bloqueio para horários fora da agenda do médico"
+    ],
+    "questions": [
+      "O sistema deveria permitir múltiplos agendamentos no mesmo horário para o mesmo médico?",
+      "Existe alguma regra para limite de consultas por paciente por dia?",
+      "Como o sistema deve se comportar em casos de conflito de agenda?"
+    ]
   }
 ]

@@ -1,0 +1,22 @@
+{
+  "name": "smarttest-maker-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Testes unitários, de API e E2E do SmartTest Maker",
+  "scripts": {
+    "test:unit": "mocha",
+    "test:api": "cypress run --spec 'cypress/e2e/api/**/*.cy.js'",
+    "test:e2e": "cypress run --spec 'cypress/e2e/frontend/**/*.cy.js'",
+    "test": "npm run test:unit && cypress run",
+    "cy:open": "cypress open"
+  },
+  "devDependencies": {
+    "chai": "^4.4.1",
+    "cypress": "^13.13.0",
+    "cypress-mochawesome-reporter": "^3.8.2",
+    "mocha": "^10.7.0",
+    "mochawesome": "^7.1.3",
+    "mochawesome-merge": "^4.3.0"
+  }
+}

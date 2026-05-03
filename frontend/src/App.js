@@ -1,10 +1,9 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
-
-const TRANSLATION_LIMIT_MSG = 'ATENÇÃO: Você usou todas as traduções gratuitas disponíveis por hoje.';
+import { authFetch } from './auth';
+import UserHeader from './UserHeader';
 
 const PRIORITY_MAP = {
   en: { 'Baixa': 'Low', 'Média': 'Medium', 'Alta': 'High' },
@@ -16,30 +15,26 @@ const PRIORITY_OPTIONS = {
   es: ['Baja', 'Media', 'Alta']
 };
 
-function isLimitWarning(text) {
-  return typeof text === 'string' && text.toUpperCase().includes('MYMEMORY WARNING');
-}
-
 async function translateText(text, from = 'pt', to = 'en') {
   if (!text || !text.trim()) return '';
 
-  // Translate line by line to respect API length limits
   const lines = text.split('\n');
   try {
     const translatedLines = await Promise.all(
       lines.map(async (line) => {
         if (!line.trim()) return line;
-        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(line)}&langpair=${from}|${to}`;
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${from}&tl=${to}&dt=t&q=${encodeURIComponent(line)}`;
         const res = await fetch(url);
         const data = await res.json();
-        const translated = data.responseData?.translatedText;
-        if (isLimitWarning(translated)) throw new Error('limit');
+        // Response: [ [ ["translated","original",...], ... ], ... ]
+        const translated = Array.isArray(data[0])
+          ? data[0].map(chunk => chunk[0] || '').join('')
+          : null;
         return translated || line;
       })
     );
     return translatedLines.join('\n');
   } catch (err) {
-    if (err.message === 'limit') return TRANSLATION_LIMIT_MSG;
     return text;
   }
 }
@@ -496,12 +491,14 @@ function App() {
   const [editingProjectId, setEditingProjectId] = useState(null);
   const [editingProjectName, setEditingProjectName] = useState('');
   const [projectError, setProjectError] = useState('');
+  const [sidebarPage, setSidebarPage] = useState(1);
+  const SIDEBAR_PAGE_SIZE = 10;
 
   const selectedEntry = allTestCases.find(tc => tc.id === selectedId) || null;
 
   // Carregar projetos ao iniciar
   useEffect(() => {
-    fetch('http://localhost:4000/projects')
+    authFetch('http://localhost:4000/projects')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setProjects(data); })
       .catch(() => {});
@@ -511,7 +508,7 @@ function App() {
   useEffect(() => {
     async function loadSaved() {
       try {
-        const res = await fetch('http://localhost:4000/test-cases');
+        const res = await authFetch('http://localhost:4000/test-cases');
         const cases = await res.json();
         if (!Array.isArray(cases) || cases.length === 0) return;
 
@@ -560,7 +557,7 @@ function App() {
         postconditions: postconditions.split('\n').map(item => item.trim()).filter(Boolean)
       };
 
-      const response = await fetch('http://localhost:4000/generate-tests', {
+      const response = await authFetch('http://localhost:4000/generate-tests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
@@ -642,7 +639,7 @@ function App() {
   const handleDelete = async (id, event) => {
     event.stopPropagation();
     try {
-      await fetch(`http://localhost:4000/test-cases/${id}`, { method: 'DELETE' });
+      await authFetch(`http://localhost:4000/test-cases/${id}`, { method: 'DELETE' });
     } catch {
       // ignora erro de rede, remove da UI de qualquer forma
     }
@@ -687,7 +684,7 @@ function App() {
         }).filter(s => s.acao),
         postconditions: postconditions.split('\n').map(p => p.trim()).filter(Boolean)
       };
-      const response = await fetch(`http://localhost:4000/test-cases/${editingId}`, {
+      const response = await authFetch(`http://localhost:4000/test-cases/${editingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedPt)
@@ -718,7 +715,7 @@ function App() {
     const name = newProjectName.trim();
     if (!name) return;
     try {
-      const res = await fetch('http://localhost:4000/projects', {
+      const res = await authFetch('http://localhost:4000/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
@@ -737,7 +734,7 @@ function App() {
     if (!name || !editingProjectId) return;
     setProjectError('');
     try {
-      const res = await fetch(`http://localhost:4000/projects/${editingProjectId}`, {
+      const res = await authFetch(`http://localhost:4000/projects/${editingProjectId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
@@ -768,7 +765,7 @@ function App() {
     if (!window.confirm(`Excluir o projeto "${proj.name}"? Os casos de teste vinculados não serão excluídos.`)) return;
     setProjectError('');
     try {
-      await fetch(`http://localhost:4000/projects/${proj.id}`, { method: 'DELETE' });
+      await authFetch(`http://localhost:4000/projects/${proj.id}`, { method: 'DELETE' });
       setProjects(prev => prev.filter(p => p.id !== proj.id));
       if (selectedProject === proj.name) setSelectedProject('');
       if (projectFilter === proj.name) setProjectFilter('');
@@ -779,6 +776,7 @@ function App() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f6f8fa', padding: 0, margin: 0 }}>
+      <UserHeader />
       <div style={{ maxWidth: hasSidebar ? 1120 : 800, margin: '40px auto', fontFamily: 'sans-serif', display: 'flex', gap: 24, alignItems: 'flex-start', padding: '0 16px' }}>
 
         {/* Sidebar */}
@@ -793,14 +791,20 @@ function App() {
                 <select
                   style={{ width: '100%', borderRadius: 6, border: '1px solid #bbb', padding: '5px 8px', fontSize: 12, color: '#333' }}
                   value={projectFilter}
-                  onChange={e => setProjectFilter(e.target.value)}
+                  onChange={e => { setProjectFilter(e.target.value); setSidebarPage(1); }}
                 >
                   <option value=''>Todos os projetos</option>
                   {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                 </select>
               </div>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {allTestCases.filter(tc => !projectFilter || (tc.project || tc.pt?.project) === projectFilter).map(tc => (
+                {(() => {
+                  const filtered = allTestCases.filter(tc => !projectFilter || (tc.project || tc.pt?.project) === projectFilter);
+                  const totalPages = Math.ceil(filtered.length / SIDEBAR_PAGE_SIZE);
+                  const page = Math.min(sidebarPage, totalPages || 1);
+                  const paginated = filtered.slice((page - 1) * SIDEBAR_PAGE_SIZE, page * SIDEBAR_PAGE_SIZE);
+                  return (<>
+                    {paginated.map(tc => (
                   <li
                     key={tc.id}
                     onClick={() => setSelectedId(tc.id)}
@@ -865,6 +869,23 @@ function App() {
                     </div>
                   </li>
                 ))}
+                    {totalPages > 1 && (
+                      <li style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 8, borderTop: '1px solid #e3eafc' }}>
+                        <button
+                          onClick={() => setSidebarPage(p => Math.max(1, p - 1))}
+                          disabled={page <= 1}
+                          style={{ background: 'none', border: '1px solid #bbb', borderRadius: 4, padding: '2px 8px', cursor: page <= 1 ? 'default' : 'pointer', color: page <= 1 ? '#bbb' : '#1976d2', fontSize: 13 }}
+                        >‹</button>
+                        <span style={{ fontSize: 11, color: '#888' }}>{page}/{totalPages}</span>
+                        <button
+                          onClick={() => setSidebarPage(p => Math.min(totalPages, p + 1))}
+                          disabled={page >= totalPages}
+                          style={{ background: 'none', border: '1px solid #bbb', borderRadius: 4, padding: '2px 8px', cursor: page >= totalPages ? 'default' : 'pointer', color: page >= totalPages ? '#bbb' : '#1976d2', fontSize: 13 }}
+                        >›</button>
+                      </li>
+                    )}
+                  </>);
+                })()}
               </ul>
             </div>
           </div>
@@ -958,7 +979,7 @@ function App() {
 
                 <div style={{ marginBottom: 16 }}>
                   <label><b>Título do Teste</b></label>
-                  <input style={styles.input} value={title} onChange={event => setTitle(event.target.value)} />
+                  <input style={styles.input} placeholder="Digite o título do caso de teste" value={title} onChange={event => setTitle(event.target.value)} />
                 </div>
                 <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 0 }}>
                   <div style={{ width: 160 }}>
