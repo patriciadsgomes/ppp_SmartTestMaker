@@ -64,6 +64,7 @@ jobs:
 
       # Verificar conteúdo do relatório unitário
       - name: Verificar conteúdo do relatório unitário
+        if: always()
         run: ls -R test/reports/unit || echo "Relatório unitário não encontrado"
 
       # Executar testes de API (Cypress)
@@ -72,34 +73,45 @@ jobs:
         run: npm run test:api
         continue-on-error: true
 
+      # Verificar conteúdo dos relatórios Cypress após API
+      - name: Verificar relatórios após testes de API
+        if: always()
+        run: ls -R test/reports/cypress || echo "Relatório Cypress (API) não encontrado"
+
       # Executar testes de frontend E2E (Cypress)
       - name: Executar testes de Frontend E2E
         working-directory: test
         run: npm run test:e2e
         continue-on-error: true
 
-      # Verificar conteúdo dos relatórios Cypress
-      - name: Verificar conteúdo dos relatórios Cypress
-        run: ls -R test/reports/cypress || echo "Relatório Cypress não encontrado"
+      # Verificar conteúdo dos relatórios Cypress após E2E
+      - name: Verificar relatórios após testes de Frontend E2E
+        if: always()
+        run: ls -R test/reports/cypress || echo "Relatório Cypress (E2E) não encontrado"
 
-      # Upload do relatório Mochawesome (testes unitários)
+      # Upload do relatório Mochawesome (testes unitários) — sempre, mesmo com falhas
       - name: Upload do relatório Mochawesome
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: unit-report
           path: test/reports/unit/
+          if-no-files-found: warn
 
-      # Upload do relatório Cypress (API + E2E)
+      # Upload do relatório Cypress (API + E2E) — sempre, mesmo com falhas
       - name: Upload do relatório Cypress
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cypress-report
           path: test/reports/cypress/
+          if-no-files-found: warn
 
-      # Upload de screenshots em caso de falha nos testes E2E
-      - name: Upload de screenshots (falhas)
-        if: failure()
+      # Upload de screenshots — sempre, mesmo com falhas
+      - name: Upload de screenshots
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cypress-screenshots
           path: test/cypress/screenshots/
+          if-no-files-found: ignore
