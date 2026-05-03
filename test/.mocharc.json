@@ -1,0 +1,12 @@
+{
+  "spec": "unit/**/*.test.js",
+  "reporter": "mochawesome",
+  "reporter-option": [
+    "reportDir=reports/unit",
+    "reportFilename=unit-report",
+    "overwrite=true",
+    "html=true",
+    "json=true"
+  ],
+  "timeout": 10000
+}

@@ -1,0 +1,134 @@
+[
+  {
+    "id": "U-001",
+    "name": "Professor Mentor",
+    "email": "mentor@smarttest.com",
+    "passwordHash": "$2b$10$Vcirs1jj1pO3jGQQs4bdhOxOLd6NNVIQyEsvZAv/oTOkjXYUNHZcu"
+  },
+  {
+    "id": "U-002",
+    "name": "Patricia Gomes",
+    "email": "patgom343@gmail.com",
+    "passwordHash": "$2b$10$kseEiufKh525sXnw/TaG/eKKT7WtbJrmB.CsYjlAquL1tmtITzpqe"
+  },
+  {
+    "id": "U-003",
+    "name": "Usuário Teste",
+    "email": "teste_1777748777870@smarttest.com",
+    "passwordHash": "$2b$10$rrfAZICGJxRts5UIy0j4dO9tlzdjMmlvKiph1CFZ3.H/huj579nSi"
+  },
+  {
+    "id": "U-004",
+    "name": "Usuário Teste",
+    "email": "teste_1777749587001@smarttest.com",
+    "passwordHash": "$2b$10$3SoooG857kPVsilML1f6D./YLEEqRYKtFyx9xsv8MmUVI9uH5WcH."
+  },
+  {
+    "id": "U-005",
+    "name": "Usuário Teste",
+    "email": "teste_1777749836425@smarttest.com",
+    "passwordHash": "$2b$10$Cy/cBp.5bWS3yfU4CzcWlOSgj8cLnjHnYbZCRBSrFc2dGBtCROo3y"
+  },
+  {
+    "id": "U-006",
+    "name": "Usuário Teste",
+    "email": "teste_1777749931884@smarttest.com",
+    "passwordHash": "$2b$10$Nt.QsL8AwVhDmMC40.4I0OAwC5WkU8WkxNGGqf7ETJM4s7n4zkdHy"
+  },
+  {
+    "id": "U-007",
+    "name": "Usuário Teste",
+    "email": "teste_1777750016052@smarttest.com",
+    "passwordHash": "$2b$10$YDIXgj7/ThCnPDrXvVLd/e5DuHqJYzK7hUqiL/knye8S64oWgfT2y"
+  },
+  {
+    "id": "U-008",
+    "name": "Usuário Teste",
+    "email": "teste_1777750165671@smarttest.com",
+    "passwordHash": "$2b$10$t5F08ATi.Hp2WE3iRS3Q8eqWelfU4BL5h201S4rYhwndwoeNFKOJe"
+  },
+  {
+    "id": "U-009",
+    "name": "Usuário Teste",
+    "email": "teste_1777750327328@smarttest.com",
+    "passwordHash": "$2b$10$ukbWIGWAIjmUen.E2hShH.jpsisXO2jjxbMWl1GLDUq1X6Uw.T/pC"
+  },
+  {
+    "id": "U-010",
+    "name": "Usuário Teste",
+    "email": "teste_1777750678689@smarttest.com",
+    "passwordHash": "$2b$10$hZAN.nOnY0/fYFCaRC01gOTxTNgewH4jOHNkgXHGjN1nneafYNEIS"
+  },
+  {
+    "id": "U-011",
+    "name": "Usuário Teste",
+    "email": "teste_1777750804776@smarttest.com",
+    "passwordHash": "$2b$10$2NpTKpxVLWyTitFqYPdE6e3DKKATUqgo6Pq0PYnWICxspaWu/jdTC"
+  },
+  {
+    "id": "U-012",
+    "name": "Usuário Teste",
+    "email": "teste_1777751082712@smarttest.com",
+    "passwordHash": "$2b$10$FqesbkVg0iD9CWbBuRysIuBN3XN7w2nTAAVAtmpwNrBfeiVi3mkB6"
+  },
+  {
+    "id": "U-013",
+    "name": "Usuário Teste",
+    "email": "teste_1777751143027@smarttest.com",
+    "passwordHash": "$2b$10$8tMnJmKob.1e/1V3eZA1juQ7CW7Q7SYpstA34iGCS0pmXQScyxtFy"
+  },
+  {
+    "id": "U-014",
+    "name": "Usuário Teste",
+    "email": "teste_1777751292795@smarttest.com",
+    "passwordHash": "$2b$10$rVlnr.eoxrJkCwpTSFl2a.WcHgWyC6fMS1/Rtf2gAZgkVMlAQ231a"
+  },
+  {
+    "id": "U-015",
+    "name": "Usuário Teste",
+    "email": "teste_1777751402730@smarttest.com",
+    "passwordHash": "$2b$10$x1Frnz8ENv0uI4umBf2dHONLoGG/f9kPQtE0peX7OuBzxPzGxZs8O"
+  },
+  {
+    "id": "U-016",
+    "name": "Usuário Teste",
+    "email": "teste_1777751579798@smarttest.com",
+    "passwordHash": "$2b$10$Uy7zigo7wCZSjTcyhpCPAuVRNXzkUPWUDq91aaNyIFiHPK0IIntky"
+  },
+  {
+    "id": "U-017",
+    "name": "Patrick James",
+    "email": "pjames@msn.com",
+    "passwordHash": "$2b$10$BpaVnHSjYqfh.ZrPrPeydOWVdoDB1hUNvCDEYMlWCUhTdchkEy2ce"
+  },
+  {
+    "id": "U-018",
+    "name": "Usuário Teste",
+    "email": "teste_1777827282427@smarttest.com",
+    "passwordHash": "$2b$10$LJsJ9IQFR7eYQ27LnWzNX.aSKKCe39Zf3IWHv6NJ8AILWK.5vfbFG"
+  },
+  {
+    "id": "U-019",
+    "name": "Usuário Teste",
+    "email": "teste_1777827523210@smarttest.com",
+    "passwordHash": "$2b$10$i4r6K0VNYNxHaVnVz3F5WedLaWr5F6FnD2BOUvA/AvcSjNhDuasPC"
+  },
+  {
+    "id": "U-020",
+    "name": "Usuário Teste",
+    "email": "teste_1777827594826@smarttest.com",
+    "passwordHash": "$2b$10$H99LxKzvAANpu/u06Vkh2.Jm3JHHcTXSmH/dgOo2jL9igrdg.RjjG"
+  },
+  {
+    "id": "U-021",
+    "name": "Usuário Teste",
+    "email": "teste_1777828003373@smarttest.com",
+    "passwordHash": "$2b$10$lKbooPbGbPphTTyDytkbpeh.RYAFjTtrPmBi0dVqYUShYBidicOba"
+  },
+  {
+    "id": "U-022",
+    "name": "Usuário Teste",
+    "email": "teste_1777828222882@smarttest.com",
+    "passwordHash": "$2b$10$qKgMU/tFSitGVQDWlr925eF2NzJTuMreWYDfrmeEvgfxVZairCss."
+  }
+]

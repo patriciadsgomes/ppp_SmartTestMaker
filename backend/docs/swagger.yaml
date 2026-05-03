@@ -1,17 +1,759 @@
 openapi: 3.0.0
 info:
-  title: SmartTest Marker API
-  version: 2.0.0
-  description: API para geração de documentos de teste estruturados baseados na ISO-29119-3
+  title: SmartTest Maker API
+  version: 3.0.0
+  description: |
+    API para geração e gerenciamento de documentos de teste estruturados baseados na **ISO-29119-3**.
+
+    ## Autenticação
+    Todos os endpoints — exceto `/auth/login` e `/auth/register` — exigem um token JWT no cabeçalho:
+    ```
+    Authorization: Bearer <token>
+    ```
+    O token é obtido via `/auth/login` ou `/auth/register` e expira em **8 horas**.
+
 servers:
   - url: http://localhost:4000
+
 tags:
+  - name: Autenticação
+    description: Registro e login de usuários
+  - name: Projetos
+    description: Gerenciamento de projetos compartilhados entre os geradores
   - name: Casos de Teste
     description: Geração e gerenciamento de Casos de Teste
   - name: Relatórios de Sessão
     description: Geração e gerenciamento de Relatórios de Sessão
   - name: Condições de Teste
     description: Geração e gerenciamento de Condições de Teste
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ── Autenticação ────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      tags: [Autenticação]
+      summary: Cadastrar novo usuário
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterInput'
+            example:
+              name: Maria Gomes
+              email: maria@smarttest.com
+              password: Teste@123
+      responses:
+        '201':
+          description: Usuário criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Dados inválidos (nome, e-mail ou senha ausentes / senha muito curta)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: E-mail já cadastrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/login:
+    post:
+      tags: [Autenticação]
+      summary: Autenticar usuário e obter token JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginInput'
+            example:
+              email: mentor@smarttest.com
+              password: Teste@123
+      responses:
+        '200':
+          description: Login realizado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: E-mail ou senha ausentes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: E-mail ou senha incorretos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  # ── Projetos ────────────────────────────────────────────────────────────────
+  /projects:
+    get:
+      tags: [Projetos]
+      summary: Listar todos os projetos
+      responses:
+        '200':
+          description: Lista de projetos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Projetos]
+      summary: Criar um novo projeto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: Sistema Hospitalar
+      responses:
+        '201':
+          description: Projeto criado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          description: Nome do projeto é obrigatório
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: Projeto já existe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /projects/{id}:
+    put:
+      tags: [Projetos]
+      summary: Renomear um projeto (propaga o novo nome para todos os registros vinculados)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: PRJ-001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: Sistema Hospitalar v2
+      responses:
+        '200':
+          description: Projeto renomeado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '400':
+          description: Nome do projeto é obrigatório
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Projeto não encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Já existe um projeto com esse nome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags: [Projetos]
+      summary: Excluir um projeto
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: PRJ-001
+      responses:
+        '200':
+          description: Projeto excluído
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ── Casos de Teste ──────────────────────────────────────────────────────────
+  /generate-tests:
+    post:
+      tags: [Casos de Teste]
+      summary: Gerar e salvar um novo caso de teste estruturado
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestCaseInput'
+      responses:
+        '200':
+          description: Caso de teste gerado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  testCases:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TestCase'
+        '400':
+          description: Requisição inválida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: Erro interno
+
+  /test-cases:
+    get:
+      tags: [Casos de Teste]
+      summary: Listar todos os casos de teste salvos
+      responses:
+        '200':
+          description: Lista de casos de teste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TestCase'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /test-cases/{id}:
+    put:
+      tags: [Casos de Teste]
+      summary: Atualizar um caso de teste pelo ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: TC-001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestCaseInput'
+      responses:
+        '200':
+          description: Caso de teste atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestCase'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Caso de teste não encontrado
+        '500':
+          description: Erro interno
+    delete:
+      tags: [Casos de Teste]
+      summary: Excluir um caso de teste pelo ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: TC-001
+      responses:
+        '200':
+          description: Caso de teste excluído
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: Erro interno
+
+  # ── Relatórios de Sessão ────────────────────────────────────────────────────
+  /session-reports:
+    get:
+      tags: [Relatórios de Sessão]
+      summary: Listar todos os relatórios de sessão
+      responses:
+        '200':
+          description: Lista de relatórios de sessão
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SessionReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Relatórios de Sessão]
+      summary: Criar um novo relatório de sessão
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionReportInput'
+      responses:
+        '201':
+          description: Relatório criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: Erro interno
+
+  /session-reports/{id}:
+    put:
+      tags: [Relatórios de Sessão]
+      summary: Atualizar um relatório de sessão pelo ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: SR-001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionReportInput'
+      responses:
+        '200':
+          description: Relatório atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Relatório não encontrado
+        '500':
+          description: Erro interno
+    delete:
+      tags: [Relatórios de Sessão]
+      summary: Excluir um relatório de sessão pelo ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: SR-001
+      responses:
+        '200':
+          description: Relatório excluído
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: Erro interno
+
+  # ── Condições de Teste ──────────────────────────────────────────────────────
+  /test-conditions:
+    get:
+      tags: [Condições de Teste]
+      summary: Listar todas as condições de teste
+      responses:
+        '200':
+          description: Lista de condições de teste
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TestConditionsDoc'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags: [Condições de Teste]
+      summary: Criar um novo documento de condições de teste
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestConditionsInput'
+      responses:
+        '201':
+          description: Documento criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestConditionsDoc'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: Erro interno
+
+  /test-conditions/{id}:
+    put:
+      tags: [Condições de Teste]
+      summary: Atualizar um documento de condições de teste pelo ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: CT-001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestConditionsInput'
+      responses:
+        '200':
+          description: Documento atualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestConditionsDoc'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Documento não encontrado
+        '500':
+          description: Erro interno
+    delete:
+      tags: [Condições de Teste]
+      summary: Excluir um documento de condições de teste pelo ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          example: CT-001
+      responses:
+        '200':
+          description: Documento excluído
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Ok'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          description: Erro interno
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT obtido via /auth/login. Expira em 8 horas.
+
+  responses:
+    Unauthorized:
+      description: Token ausente, inválido ou expirado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    # ── Auth ────────────────────────────────────────────────────────────────
+    LoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: mentor@smarttest.com
+        password:
+          type: string
+          example: Teste@123
+
+    RegisterInput:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          example: Maria Gomes
+        email:
+          type: string
+          format: email
+          example: maria@smarttest.com
+        password:
+          type: string
+          minLength: 6
+          example: Teste@123
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT válido por 8 horas
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        user:
+          $ref: '#/components/schemas/UserPublic'
+
+    UserPublic:
+      type: object
+      properties:
+        id:
+          type: string
+          example: U-001
+        name:
+          type: string
+          example: Professor Mentor
+        email:
+          type: string
+          example: mentor@smarttest.com
+
+    # ── Projetos ─────────────────────────────────────────────────────────────
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+          example: PRJ-001
+        name:
+          type: string
+          example: Sistema Hospitalar
+
+    # ── Casos de Teste ──────────────────────────────────────────────────────
+    TestCaseInput:
+      type: object
+      required: [title, steps]
+      properties:
+        title:
+          type: string
+          example: Validar que uma consulta é agendada com sucesso para um paciente com dados válidos
+        priority:
+          type: string
+          enum: [Baixa, Média, Alta]
+          example: Alta
+        traceability:
+          type: string
+          example: RN5
+        project:
+          type: string
+          example: Sistema Hospitalar
+        preconditions:
+          type: array
+          items:
+            type: string
+          example:
+            - Paciente cadastrado no sistema
+            - Médico disponível na agenda
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              action:
+                type: string
+              expectedResult:
+                type: string
+          example:
+            - action: Acessar a tela de agendamento
+              expectedResult: Tela de agendamento exibida corretamente
+            - action: Preencher os dados do paciente e selecionar o médico
+              expectedResult: Dados preenchidos sem erros de validação
+        postconditions:
+          type: array
+          items:
+            type: string
+          example:
+            - Consulta registrada no sistema
+            - Confirmação enviada ao paciente
+
+    TestCase:
+      allOf:
+        - $ref: '#/components/schemas/TestCaseInput'
+        - type: object
+          properties:
+            id:
+              type: string
+              example: TC-001
+
+    # ── Relatórios de Sessão ────────────────────────────────────────────────
+    SessionReportInput:
+      type: object
+      required: [tester, module, charter]
+      properties:
+        date:
+          type: string
+          format: date-time
+          example: "2026-03-20T10:20"
+        tester:
+          type: string
+          example: Maria Gomes
+        module:
+          type: string
+          example: Agendamento de Consultas
+        project:
+          type: string
+          example: Sistema Hospitalar
+        charter:
+          type: object
+          properties:
+            text:
+              type: string
+              example: "Explore a funcionalidade de agendamento de consultas\nCom a heurística focada em validação de regras de negócio\nPara descobrir se o sistema lida corretamente com situações inválidas"
+        sessionSize:
+          type: string
+          example: 30 minutos
+        notes:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+                enum: [I, R]
+              text:
+                type: string
+          example:
+            - type: I
+              text: Consegui agendar uma consulta para o mesmo horário com o mesmo médico
+            - type: R
+              text: Múltiplas consultas no mesmo horário podem gerar conflitos graves no atendimento
+        defects:
+          type: array
+          items:
+            type: string
+          example:
+            - O sistema permite agendamento duplicado para o mesmo horário e médico
+            - É possível agendar consultas em datas passadas
+        questions:
+          type: array
+          items:
+            type: string
+          example:
+            - O sistema deveria permitir múltiplos agendamentos no mesmo horário para o mesmo médico?
+
+    SessionReport:
+      allOf:
+        - $ref: '#/components/schemas/SessionReportInput'
+        - type: object
+          properties:
+            id:
+              type: string
+              example: SR-001
+
+    # ── Condições de Teste ──────────────────────────────────────────────────
+    TestConditionsInput:
+      type: object
+      required: [requirements, conditions]
+      properties:
+        requirements:
+          type: string
+          example: RN5 (Agendamento de consultas)
+        project:
+          type: string
+          example: Sistema Hospitalar
+        conditions:
+          type: array
+          items:
+            type: object
+            properties:
+              condId:
+                type: integer
+                example: 1
+              description:
+                type: string
+                example: Validação de disponibilidade de horário na agenda do médico
+              priority:
+                type: string
+                enum: [Alta, Média, Baixa]
+                example: Alta
+
+    TestConditionsDoc:
+      allOf:
+        - $ref: '#/components/schemas/TestConditionsInput'
+        - type: object
+          properties:
+            id:
+              type: string
+              example: CT-001
+
+    # ── Utilitários ─────────────────────────────────────────────────────────
+    Ok:
+      type: object
+      properties:
+        ok:
+          type: boolean
+          example: true
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: Mensagem de erro descritiva
+
 
 paths:
   # ── Casos de Teste ──────────────────────────────────────────────────────────

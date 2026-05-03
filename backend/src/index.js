@@ -5,6 +5,11 @@ import swaggerUi from 'swagger-ui-express';
 import { generateTestCases } from './testGenerator.js';
 import fs from 'fs';
 import path from 'path';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'smarttest_secret_2026';
+const JWT_EXPIRES = '8h';
 
 const app = express();
 app.use(cors());
@@ -12,6 +17,76 @@ app.use(express.json());
 
 const swaggerDocument = YAML.load('./docs/swagger.yaml');
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+// ── Auth helpers ────────────────────────────────────────────
+const USERS_FILE = path.join(process.cwd(), 'fixtures', 'users.json');
+
+function readUsers() {
+  try {
+    if (!fs.existsSync(USERS_FILE)) return [];
+    return JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8'));
+  } catch { return []; }
+}
+function writeUsers(data) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2));
+}
+
+function verifyToken(req, res, next) {
+  const auth = req.headers['authorization'];
+  if (!auth || !auth.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Token não fornecido' });
+  }
+  try {
+    req.user = jwt.verify(auth.split(' ')[1], JWT_SECRET);
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Token inválido ou expirado' });
+  }
+}
+
+// POST /auth/register
+app.post('/auth/register', async (req, res) => {
+  const { name, email, password } = req.body;
+  if (!name?.trim() || !email?.trim() || !password) {
+    return res.status(400).json({ error: 'Nome, e-mail e senha são obrigatórios' });
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email.trim())) {
+    return res.status(400).json({ error: 'E-mail inválido' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres' });
+  }
+  const users = readUsers();
+  if (users.find(u => u.email.toLowerCase() === email.trim().toLowerCase())) {
+    return res.status(409).json({ error: 'E-mail já cadastrado' });
+  }
+  const passwordHash = await bcrypt.hash(password, 10);
+  const id = 'U-' + String(users.length + 1).padStart(3, '0');
+  const newUser = { id, name: name.trim(), email: email.trim().toLowerCase(), passwordHash };
+  users.push(newUser);
+  writeUsers(users);
+  const token = jwt.sign({ id: newUser.id, name: newUser.name, email: newUser.email }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+  res.status(201).json({ token, user: { id: newUser.id, name: newUser.name, email: newUser.email } });
+});
+
+// POST /auth/login
+app.post('/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email?.trim() || !password) {
+    return res.status(400).json({ error: 'E-mail e senha são obrigatórios' });
+  }
+  const users = readUsers();
+  const user = users.find(u => u.email === email.trim().toLowerCase());
+  if (!user) return res.status(401).json({ error: 'E-mail ou senha incorretos' });
+  const valid = await bcrypt.compare(password, user.passwordHash);
+  if (!valid) return res.status(401).json({ error: 'E-mail ou senha incorretos' });
+  const token = jwt.sign({ id: user.id, name: user.name, email: user.email }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+  res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
+});
+
+// ── Todas as rotas abaixo exigem token JWT ──────────────────
+app.use(verifyToken);
 
 app.get('/test-cases', (req, res) => {
   const filePath = path.join(process.cwd(), 'testcases.json');

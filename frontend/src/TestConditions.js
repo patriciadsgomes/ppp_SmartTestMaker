@@ -2,20 +2,66 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { authFetch } from './auth';
+import UserHeader from './UserHeader';
 
 const PRIORITY_OPTIONS = ['Alta', 'Média', 'Baixa'];
 
+async function translateText(text, from = 'pt', to = 'en') {
+  if (!text || !text.trim()) return '';
+  const lines = text.split('\n');
+  try {
+    const translatedLines = await Promise.all(
+      lines.map(async (line) => {
+        if (!line.trim()) return line;
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${from}&tl=${to}&dt=t&q=${encodeURIComponent(line)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const translated = Array.isArray(data[0]) ? data[0].map(chunk => chunk[0] || '').join('') : null;
+        return translated || line;
+      })
+    );
+    return translatedLines.join('\n');
+  } catch {
+    return text;
+  }
+}
+
+const PRIORITY_MAP = {
+  en: { 'Alta': 'High', 'Média': 'Medium', 'Baixa': 'Low' },
+  es: { 'Alta': 'Alta', 'Média': 'Media', 'Baixa': 'Baja' },
+};
+
+async function translateConditionsDoc(doc, to = 'en') {
+  const [requirements, translatedConditions] = await Promise.all([
+    translateText(doc.requirements, 'pt', to),
+    Promise.all((doc.conditions || []).map(async c => ({
+      ...c,
+      description: await translateText(c.description, 'pt', to),
+      priority: PRIORITY_MAP[to]?.[c.priority] || c.priority,
+    }))),
+  ]);
+  return { ...doc, requirements, conditions: translatedConditions };
+}
+
+const COND_LABELS = {
+  pt: { headerTitle: 'SmartTest Marker — Condições de Teste', requirements: 'Requisitos Testados', section: 'Condições de Teste', colId: 'ID', colDesc: 'Condição de Teste', colPriority: 'Prioridade' },
+  en: { headerTitle: 'SmartTest Marker — Test Conditions', requirements: 'Tested Requirements', section: 'Test Conditions', colId: 'ID', colDesc: 'Test Condition', colPriority: 'Priority' },
+  es: { headerTitle: 'SmartTest Marker — Condiciones de Prueba', requirements: 'Requisitos Probados', section: 'Condiciones de Prueba', colId: 'ID', colDesc: 'Condición de Prueba', colPriority: 'Prioridad' },
+};
+
 // ── Export helpers ──────────────────────────────────────────────────────────
 
-function exportTXT(doc) {
+function exportTXT(doc, language = 'pt') {
+  const L = COND_LABELS[language] || COND_LABELS.pt;
   const lines = [
     '====================================',
-    '       CONDIÇÕES DE TESTE',
+    `       ${L.section.toUpperCase()}`,
     '====================================',
     `ID: ${doc.id}`,
-    `Requisitos Testados: ${doc.requirements}`,
+    `${L.requirements}: ${doc.requirements}`,
     '',
-    'ID  | Condição de Teste                                    | Prioridade',
+    `${L.colId.padEnd(4)}| ${L.colDesc.padEnd(53)}| ${L.colPriority}`,
     '----+------------------------------------------------------+-----------',
     ...(doc.conditions || []).map(c =>
       `${String(c.condId).padEnd(4)}| ${String(c.description).padEnd(53)}| ${c.priority}`
@@ -30,10 +76,11 @@ function exportTXT(doc) {
   URL.revokeObjectURL(url);
 }
 
-function exportCSV(doc) {
+function exportCSV(doc, language = 'pt') {
+  const L = COND_LABELS[language] || COND_LABELS.pt;
   const escape = v => `"${String(v || '').replace(/"/g, '""')}"`;
   const rows = [
-    ['Documento ID', 'Requisitos Testados', 'ID Condição', 'Condição de Teste', 'Prioridade'].map(escape),
+    ['ID', L.requirements, L.colId, L.colDesc, L.colPriority].map(escape),
     ...(doc.conditions || []).map(c => [
       escape(doc.id),
       escape(doc.requirements),
@@ -51,7 +98,8 @@ function exportCSV(doc) {
   URL.revokeObjectURL(url);
 }
 
-function exportPDF(doc) {
+function exportPDF(doc, language = 'pt') {
+  const L = COND_LABELS[language] || COND_LABELS.pt;
   const pdf = new jsPDF();
   const margin = 14;
   const pageW = pdf.internal.pageSize.getWidth();
@@ -68,7 +116,7 @@ function exportPDF(doc) {
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(13);
   pdf.setTextColor(255, 255, 255);
-  pdf.text('SmartTest Marker — Condições de Teste', margin + 4, y + 9.5);
+  pdf.text(L.headerTitle, margin + 4, y + 9.5);
   y += 20;
 
   const fieldRow = (label, value) => {
@@ -93,14 +141,14 @@ function exportPDF(doc) {
   };
 
   fieldRow('ID', doc.id);
-  fieldRow('Requisitos Testados', doc.requirements);
+  fieldRow(L.requirements, doc.requirements);
   y += 2;
 
-  sectionTitle('Condições de Teste');
+  sectionTitle(L.section);
   autoTable(pdf, {
     startY: y,
     margin: { left: margin, right: margin },
-    head: [['ID', 'Condição de Teste', 'Prioridade']],
+    head: [[L.colId, L.colDesc, L.colPriority]],
     body: (doc.conditions || []).map(c => [c.condId, c.description, c.priority]),
     headStyles: { fillColor: blue, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 10 },
     bodyStyles: { fontSize: 10, textColor: textDark },
@@ -113,7 +161,7 @@ function exportPDF(doc) {
 }
 
 // ── Export dropdown ─────────────────────────────────────────────────────────
-function ExportButton({ doc }) {
+function ExportButton({ doc, language = 'pt' }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -126,7 +174,7 @@ function ExportButton({ doc }) {
       <button onClick={() => setOpen(o => !o)} style={btnStyles.export}>⬇ Exportar</button>
       {open && (
         <div style={{ position: 'absolute', right: 0, top: '110%', background: '#fff', border: '1px solid #ddd', borderRadius: 8, boxShadow: '0 4px 16px #0002', zIndex: 100, minWidth: 130 }}>
-          {[['PDF', () => exportPDF(doc)], ['TXT', () => exportTXT(doc)], ['CSV', () => exportCSV(doc)]].map(([label, fn]) => (
+          {[['PDF', () => exportPDF(doc, language)], ['TXT', () => exportTXT(doc, language)], ['CSV', () => exportCSV(doc, language)]].map(([label, fn]) => (
             <button key={label} onClick={() => { fn(); setOpen(false); }}
               style={{ display: 'block', width: '100%', padding: '10px 18px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', fontWeight: 600, fontSize: 14, color: '#333' }}
               onMouseEnter={e => e.currentTarget.style.background = '#f0f4ff'}
@@ -140,18 +188,19 @@ function ExportButton({ doc }) {
 }
 
 // ── Document card ───────────────────────────────────────────────────────────
-function ConditionsCard({ doc }) {
+function ConditionsCard({ doc, language = 'pt' }) {
+  const L = COND_LABELS[language] || COND_LABELS.pt;
   return (
     <div style={cardStyle}>
       <div style={rowStyle}><b>ID:</b> {doc.id}</div>
-      <div style={rowStyle}><b>Requisitos Testados:</b> {doc.requirements}</div>
-      <div style={sectionTitleStyle}>Condições de Teste</div>
+      <div style={rowStyle}><b>{L.requirements}:</b> {doc.requirements}</div>
+      <div style={sectionTitleStyle}>{L.section}</div>
       <table style={tableStyle}>
         <thead>
           <tr style={{ background: '#e3eafc' }}>
-            <th style={{ ...thStyle, width: 50, textAlign: 'center' }}>ID</th>
-            <th style={thStyle}>Condição de Teste</th>
-            <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>Prioridade</th>
+            <th style={{ ...thStyle, width: 50, textAlign: 'center' }}>{L.colId}</th>
+            <th style={thStyle}>{L.colDesc}</th>
+            <th style={{ ...thStyle, width: 100, textAlign: 'center' }}>{L.colPriority}</th>
           </tr>
         </thead>
         <tbody>
@@ -180,6 +229,7 @@ export default function TestConditions() {
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [tab, setTab] = useState('pt');
 
   // projects
   const [projects, setProjects] = useState([]);
@@ -190,26 +240,38 @@ export default function TestConditions() {
   const [editingProjectId, setEditingProjectId] = useState(null);
   const [editingProjectName, setEditingProjectName] = useState('');
   const [projectError, setProjectError] = useState('');
+  const [sidebarPage, setSidebarPage] = useState(1);
+  const SIDEBAR_PAGE_SIZE = 10;
 
-  const selectedDoc = allDocs.find(d => d.id === selectedId) || null;
+  const selectedEntry = allDocs.find(d => d.id === selectedId) || null;
 
   useEffect(() => {
-    fetch('http://localhost:4000/projects')
+    authFetch('http://localhost:4000/projects')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setProjects(data); })
       .catch(() => {});
   }, []);
 
   useEffect(() => {
-    fetch('http://localhost:4000/test-conditions')
-      .then(r => r.json())
-      .then(data => {
-        if (Array.isArray(data) && data.length > 0) {
-          setAllDocs(data);
-          setSelectedId(data[data.length - 1].id);
-        }
-      })
-      .catch(() => {});
+    async function loadDocs() {
+      try {
+        const res = await authFetch('http://localhost:4000/test-conditions');
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length === 0) return;
+        const entries = await Promise.all(
+          data.map(async (ptDoc) => {
+            const [enDoc, esDoc] = await Promise.all([
+              translateConditionsDoc(ptDoc, 'en'),
+              translateConditionsDoc(ptDoc, 'es'),
+            ]);
+            return { id: ptDoc.id, pt: ptDoc, en: enDoc, es: esDoc };
+          })
+        );
+        setAllDocs(entries);
+        setSelectedId(entries[entries.length - 1].id);
+      } catch {}
+    }
+    loadDocs();
   }, []);
 
   const buildPayload = () => ({
@@ -228,14 +290,19 @@ export default function TestConditions() {
   const handleSave = async () => {
     setLoading(true); setError('');
     try {
-      const res = await fetch('http://localhost:4000/test-conditions', {
+      const res = await authFetch('http://localhost:4000/test-conditions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(buildPayload()),
       });
       const saved = await res.json();
       if (!res.ok) throw new Error(saved.error || 'Erro ao salvar');
-      setAllDocs(prev => [...prev, saved]);
+      const [enDoc, esDoc] = await Promise.all([
+        translateConditionsDoc(saved, 'en'),
+        translateConditionsDoc(saved, 'es'),
+      ]);
+      const newEntry = { id: saved.id, pt: saved, en: enDoc, es: esDoc };
+      setAllDocs(prev => [...prev, newEntry]);
       setSelectedId(saved.id);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -244,14 +311,18 @@ export default function TestConditions() {
   const handleUpdate = async () => {
     setLoading(true); setError('');
     try {
-      const res = await fetch(`http://localhost:4000/test-conditions/${editingId}`, {
+      const res = await authFetch(`http://localhost:4000/test-conditions/${editingId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(buildPayload()),
       });
       const saved = await res.json();
       if (!res.ok) throw new Error(saved.error || 'Erro ao atualizar');
-      setAllDocs(prev => prev.map(d => d.id === editingId ? saved : d));
+      const [enDoc, esDoc] = await Promise.all([
+        translateConditionsDoc(saved, 'en'),
+        translateConditionsDoc(saved, 'es'),
+      ]);
+      setAllDocs(prev => prev.map(d => d.id === editingId ? { id: editingId, pt: saved, en: enDoc, es: esDoc } : d));
       setEditingId(null);
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -259,7 +330,7 @@ export default function TestConditions() {
 
   const handleDelete = async (id, e) => {
     e.stopPropagation();
-    try { await fetch(`http://localhost:4000/test-conditions/${id}`, { method: 'DELETE' }); } catch {}
+    try { await authFetch(`http://localhost:4000/test-conditions/${id}`, { method: 'DELETE' }); } catch {}
     setAllDocs(prev => {
       const updated = prev.filter(d => d.id !== id);
       if (selectedId === id) setSelectedId(updated.length > 0 ? updated[updated.length - 1].id : null);
@@ -270,8 +341,9 @@ export default function TestConditions() {
 
   const handleEdit = (id, e) => {
     e.stopPropagation();
-    const d = allDocs.find(doc => doc.id === id);
-    if (!d) return;
+    const entry = allDocs.find(doc => doc.id === id);
+    if (!entry) return;
+    const d = entry.pt;
     setRequirements(d.requirements || '');
     setConditions(d.conditions?.length ? d.conditions : [{ condId: 1, description: '', priority: 'Alta' }]);
     setEditingId(id);
@@ -315,7 +387,7 @@ export default function TestConditions() {
     if (!name) return;
     setProjectError('');
     try {
-      const res = await fetch('http://localhost:4000/projects', {
+      const res = await authFetch('http://localhost:4000/projects', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       });
@@ -332,7 +404,7 @@ export default function TestConditions() {
     if (!name || !editingProjectId) return;
     setProjectError('');
     try {
-      const res = await fetch(`http://localhost:4000/projects/${editingProjectId}`, {
+      const res = await authFetch(`http://localhost:4000/projects/${editingProjectId}`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       });
@@ -341,7 +413,7 @@ export default function TestConditions() {
       const oldName = projects.find(p => p.id === editingProjectId)?.name;
       setProjects(prev => prev.map(p => p.id === editingProjectId ? updated : p));
       setSelectedProject(updated.name);
-      if (oldName) setAllDocs(prev => prev.map(d => d.project === oldName ? { ...d, project: updated.name } : d));
+      if (oldName) setAllDocs(prev => prev.map(d => d.pt?.project !== oldName ? d : { ...d, pt: { ...d.pt, project: updated.name } }));
       setEditingProjectId(null); setEditingProjectName('');
     } catch (e) { setProjectError(e.message); }
   };
@@ -350,7 +422,7 @@ export default function TestConditions() {
     if (!window.confirm(`Excluir o projeto "${proj.name}"? Os documentos vinculados não serão excluídos.`)) return;
     setProjectError('');
     try {
-      await fetch(`http://localhost:4000/projects/${proj.id}`, { method: 'DELETE' });
+      await authFetch(`http://localhost:4000/projects/${proj.id}`, { method: 'DELETE' });
       setProjects(prev => prev.filter(p => p.id !== proj.id));
       if (selectedProject === proj.name) setSelectedProject('');
       if (projectFilter === proj.name) setProjectFilter('');
@@ -359,6 +431,7 @@ export default function TestConditions() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f6f8fa', padding: 0, margin: 0 }}>
+      <UserHeader />
       <div style={{ maxWidth: hasSidebar ? 1120 : 800, margin: '40px auto', fontFamily: 'sans-serif', display: 'flex', gap: 24, alignItems: 'flex-start', padding: '0 16px' }}>
 
         {/* Sidebar */}
@@ -369,20 +442,26 @@ export default function TestConditions() {
               {/* Project filter */}
               <div style={{ marginBottom: 10 }}>
                 <select style={{ width: '100%', borderRadius: 6, border: '1px solid #bbb', padding: '5px 8px', fontSize: 12, color: '#333' }}
-                  value={projectFilter} onChange={e => setProjectFilter(e.target.value)}>
+                  value={projectFilter} onChange={e => { setProjectFilter(e.target.value); setSidebarPage(1); }}>
                   <option value=''>Todos os projetos</option>
                   {projects.map(p => <option key={p.id} value={p.name}>{p.name}</option>)}
                 </select>
               </div>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {allDocs.filter(d => !projectFilter || d.project === projectFilter).map(d => (
+                {(() => {
+                  const filtered = allDocs.filter(d => !projectFilter || d.pt?.project === projectFilter);
+                  const totalPages = Math.ceil(filtered.length / SIDEBAR_PAGE_SIZE);
+                  const page = Math.min(sidebarPage, totalPages || 1);
+                  const paginated = filtered.slice((page - 1) * SIDEBAR_PAGE_SIZE, page * SIDEBAR_PAGE_SIZE);
+                  return (<>
+                    {paginated.map(d => (
                   <li key={d.id} onClick={() => setSelectedId(d.id)}
                     style={{ padding: '8px 10px', borderRadius: 6, marginBottom: 6, cursor: 'pointer', background: selectedId === d.id ? '#e3eafc' : '#f6f8fa', border: selectedId === d.id ? '1.5px solid #1976d2' : '1px solid #ddd', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 6 }}
                   >
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ fontWeight: 700, color: '#1976d2', fontSize: 12 }}>{d.id}</span>
-                      {d.project && <span style={{ display: 'block', color: '#888', fontSize: 10, marginTop: 1 }}>📁 {d.project}</span>}
-                      <span style={{ display: 'block', color: '#333', fontSize: 12, marginTop: 2, wordBreak: 'break-word' }}>{d.requirements}</span>
+                      {d.pt?.project && <span style={{ display: 'block', color: '#888', fontSize: 10, marginTop: 1 }}>📁 {d.pt.project}</span>}
+                      <span style={{ display: 'block', color: '#333', fontSize: 12, marginTop: 2, wordBreak: 'break-word' }}>{d.pt?.requirements}</span>
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <button onClick={(e) => handleEdit(d.id, e)} title="Editar" style={btnStyles.icon}>✏️</button>
@@ -390,6 +469,17 @@ export default function TestConditions() {
                     </div>
                   </li>
                 ))}
+                    {totalPages > 1 && (
+                      <li style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, paddingTop: 8, borderTop: '1px solid #e3eafc' }}>
+                        <button onClick={() => setSidebarPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+                          style={{ background: 'none', border: '1px solid #bbb', borderRadius: 4, padding: '2px 8px', cursor: page <= 1 ? 'default' : 'pointer', color: page <= 1 ? '#bbb' : '#1976d2', fontSize: 13 }}>‹</button>
+                        <span style={{ fontSize: 11, color: '#888' }}>{page}/{totalPages}</span>
+                        <button onClick={() => setSidebarPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+                          style={{ background: 'none', border: '1px solid #bbb', borderRadius: 4, padding: '2px 8px', cursor: page >= totalPages ? 'default' : 'pointer', color: page >= totalPages ? '#bbb' : '#1976d2', fontSize: 13 }}>›</button>
+                      </li>
+                    )}
+                  </>);
+                })()}
               </ul>
             </div>
           </div>
@@ -544,13 +634,18 @@ export default function TestConditions() {
             {error && <div style={errorStyle}>{error}</div>}
 
             {/* Document display */}
-            {selectedDoc && (
+            {selectedEntry && (
               <div style={{ marginTop: 32 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                   <h2 style={{ color: '#1976d2', margin: 0 }}>Condições de Teste Geradas</h2>
-                  <ExportButton doc={selectedDoc} />
+                  <ExportButton doc={selectedEntry[tab] || selectedEntry.pt} language={tab} />
                 </div>
-                <ConditionsCard doc={selectedDoc} />
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                  <button onClick={() => setTab('pt')} style={tab === 'pt' ? btnStyles.activeTab : btnStyles.tab}>Português</button>
+                  <button onClick={() => setTab('en')} style={tab === 'en' ? btnStyles.activeTab : btnStyles.tab}>English</button>
+                  <button onClick={() => setTab('es')} style={tab === 'es' ? btnStyles.activeTab : btnStyles.tab}>Español</button>
+                </div>
+                <ConditionsCard doc={selectedEntry[tab] || selectedEntry.pt} language={tab} />
               </div>
             )}
           </div>
@@ -592,6 +687,8 @@ const btnStyles = {
   addItem: { background: 'none', color: '#1976d2', border: '1px dashed #1976d2', borderRadius: 6, padding: '5px 14px', fontWeight: 600, fontSize: 13, cursor: 'pointer', marginTop: 4 },
   remove: { background: 'none', border: 'none', color: '#d32f2f', fontWeight: 700, fontSize: 16, cursor: 'pointer', padding: '4px 6px' },
   icon: { background: 'none', border: 'none', cursor: 'pointer', padding: '2px 4px', color: '#1976d2', fontSize: 14, lineHeight: 1, flexShrink: 0, borderRadius: 4 },
+  tab: { background: '#f0f4ff', color: '#1976d2', border: '1px solid #1976d2', borderRadius: 6, padding: '6px 18px', fontWeight: 600, fontSize: 14, cursor: 'pointer' },
+  activeTab: { background: '#1976d2', color: '#fff', border: '1px solid #1976d2', borderRadius: 6, padding: '6px 18px', fontWeight: 600, fontSize: 14, cursor: 'pointer' },
 };
 
 const actionBtnStyle = (color) => ({

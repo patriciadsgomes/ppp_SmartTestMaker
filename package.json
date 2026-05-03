@@ -4,7 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm test --prefix test",
+    "test:unit": "npm run test:unit --prefix test",
+    "test:api": "npm run test:api --prefix test",
+    "test:e2e": "npm run test:e2e --prefix test",
+    "cy:open": "npm run cy:open --prefix test"
   },
   "keywords": [],
   "author": "",
