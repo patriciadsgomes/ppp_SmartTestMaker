@@ -8,5 +8,6 @@
     "html=true",
     "json=true"
   ],
-  "timeout": 10000
+  "timeout": 10000,
+  "exit": true
 }
