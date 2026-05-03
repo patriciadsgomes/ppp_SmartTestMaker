@@ -1,0 +1,105 @@
+name: CI Automated Tests — SmartTest Maker
+
+# Gatilho
+on:
+  workflow_dispatch:
+
+jobs:
+  tests:
+
+    # Config SO
+    runs-on: ubuntu-latest
+
+    # Variáveis
+    env:
+      BACKEND_URL: 'http://localhost:4000'
+      FRONTEND_URL: 'http://localhost:3000'
+
+    # Ações e passos
+    steps:
+
+      # Clonar o repositório
+      - name: Checkout do Repositório
+        uses: actions/checkout@v4
+
+      # Instalar dependências do backend
+      - name: Instalar dependências do Backend
+        working-directory: backend
+        run: npm install
+
+      # Instalar dependências do frontend
+      - name: Instalar dependências do Frontend
+        working-directory: frontend
+        run: npm install
+
+      # Instalar dependências dos testes
+      - name: Instalar dependências dos Testes
+        working-directory: test
+        run: npm install
+
+      # Iniciar servidor do backend em background
+      - name: Iniciar o servidor do Backend (porta 4000)
+        working-directory: backend
+        run: npm start &
+
+      # Iniciar servidor do frontend em background
+      - name: Iniciar o servidor do Frontend (porta 3000)
+        working-directory: frontend
+        run: npm start &
+        env:
+          BROWSER: none
+          CI: false
+
+      # Aguardar as portas TCP ficarem disponíveis (não requer autenticação)
+      - name: Aguardar Backend e Frontend estarem prontos
+        run: |
+          npx wait-on tcp:localhost:4000 --timeout 30000
+          npx wait-on tcp:localhost:3000 --timeout 60000
+
+      # Executar testes unitários (Mocha + Mochawesome)
+      - name: Executar testes unitários
+        working-directory: test
+        run: npm run test:unit
+        continue-on-error: true
+
+      # Verificar conteúdo do relatório unitário
+      - name: Verificar conteúdo do relatório unitário
+        run: ls -R test/reports/unit || echo "Relatório unitário não encontrado"
+
+      # Executar testes de API (Cypress)
+      - name: Executar testes de API
+        working-directory: test
+        run: npm run test:api
+        continue-on-error: true
+
+      # Executar testes de frontend E2E (Cypress)
+      - name: Executar testes de Frontend E2E
+        working-directory: test
+        run: npm run test:e2e
+        continue-on-error: true
+
+      # Verificar conteúdo dos relatórios Cypress
+      - name: Verificar conteúdo dos relatórios Cypress
+        run: ls -R test/reports/cypress || echo "Relatório Cypress não encontrado"
+
+      # Upload do relatório Mochawesome (testes unitários)
+      - name: Upload do relatório Mochawesome
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-report
+          path: test/reports/unit/
+
+      # Upload do relatório Cypress (API + E2E)
+      - name: Upload do relatório Cypress
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-report
+          path: test/reports/cypress/
+
+      # Upload de screenshots em caso de falha nos testes E2E
+      - name: Upload de screenshots (falhas)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-screenshots
+          path: test/cypress/screenshots/
